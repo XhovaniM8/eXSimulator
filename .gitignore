@@ -1,0 +1,43 @@
+# Build
+build/
+cmake-build-*/
+*.o
+*.a
+*.so
+*.dylib
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.cache/
+compile_commands.json
+
+# Generated
+*.journal
+*.log
+*.svg
+*.data
+*.folded
+
+# Data
+data/logs/
+data/perf/
+data/benchmarks/
+
+# Dashboard
+dashboard/node_modules/
+dashboard/dist/
+dashboard/.env
+dashboard/.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Profiling
+perf.data*
+cachegrind.out.*
+callgrind.out.*
