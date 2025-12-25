@@ -86,37 +86,66 @@ exchange-simulator/
 └── cmake/              # CMake modules
 ```
 
-## Work Split
+## Implementation
 
-### C++ Core (You)
+### Core Engine
 
 | Component | Description | Key Challenges |
 |-----------|-------------|----------------|
 | `OrderBook` | Price-time priority LOB with bid/ask sides | Cache-friendly level storage, O(1) best price |
 | `MatchingEngine` | Processes orders, emits fills | Partial fills, self-trade prevention |
+| `PriceLevel` | FIFO queue per price, intrusive linked list | O(1) add/cancel, memory locality |
 | `SPSCQueue` | Lock-free inter-thread communication | Memory ordering, false sharing avoidance |
-| `EventJournal` | Append-only binary log | Zero-copy writes, mmap for replay |
-| `Benchmarks` | Load generator, latency histograms | rdtsc timing, p50/p99 calculation |
-| `Replay` | Deterministic re-execution | Byte-for-byte reproducibility |
+| `MemoryPool` | Pre-allocated order storage | Zero allocation on hot path |
 
-### Dashboard/Full-Stack (Friend)
+### Replay & Persistence
 
 | Component | Description | Key Challenges |
 |-----------|-------------|----------------|
-| `WebSocket Server` | Publishes L2 book, trades | Backpressure, binary framing |
-| `REST API` | Control plane: start/stop/config | Auth, validation |
-| `React Dashboard` | Real-time order book, charts | Efficient re-renders, WebGL for perf |
-| `Agent Controls` | Start/stop agents, parameter sweeps | State management |
-| `Reports` | Export latency histograms, PnL | CSV/JSON export |
+| `EventJournal` | Append-only binary log with CRC | Zero-copy writes, mmap for replay |
+| `ReplayHarness` | Deterministic re-execution | Byte-for-byte reproducibility |
 
-### Joint Work
+### Trading Agents
 
-| Component | Description |
-|-----------|-------------|
-| API Contract | Protobuf/FlatBuffers message definitions |
-| Integration Tests | End-to-end scenario validation |
-| Trading Agents | Simple MM, momentum, noise traders |
-| Documentation | API docs, architecture decisions |
+| Component | Description | Key Challenges |
+|-----------|-------------|----------------|
+| `MarketMaker` | Two-sided quotes, inventory skew | Position limits, spread calculation |
+| `Momentum` | Trend-following signals | Lookback window, threshold tuning |
+| `NoiseTrader` | Random order flow for liquidity | Configurable order mix |
+
+### Network & Dashboard
+
+| Component | Description | Key Challenges |
+|-----------|-------------|----------------|
+| `WebSocket Server` | Publishes L2 book, BBO, trades | Backpressure, binary framing |
+| `REST API` | Control plane: start/stop/config | Validation, state management |
+| `React Dashboard` | Real-time order book, latency charts | Efficient re-renders |
+
+### Benchmarking
+
+| Component | Description | Key Challenges |
+|-----------|-------------|----------------|
+| `Timing` | rdtsc cycle-accurate measurement | Calibration, TSC invariance |
+| `Histogram` | HDR histogram for percentiles | Memory-efficient bucketing |
+| `LoadGenerator` | Synthetic order flow | Realistic patterns |
+
+## Goals
+
+### Performance
+- **Throughput**: 1M+ orders/sec (single symbol, single thread)
+- **p50 Latency**: <1µs order-to-ack
+- **p99 Latency**: <10µs including worst-case matching
+- **Memory**: <64 bytes per order (cache-line aligned)
+
+### Correctness
+- **Deterministic Replay**: 100% reproducible from event journal
+- **FIFO Matching**: Price-time priority enforced
+- **Concurrency**: Lock-free queues, no data races
+
+### Observability
+- **Latency Histograms**: p50/p90/p99/p99.9 percentiles
+- **Throughput Metrics**: Orders/sec, matches/sec
+- **Flamegraphs**: CPU profiling with perf
 
 ## Target Metrics
 
