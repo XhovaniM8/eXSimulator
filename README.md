@@ -1,8 +1,6 @@
-# eXSimulator
+# Exchange Simulator
 
 A low-latency, deterministic limit-order-book exchange with matching engine, simulated trading agents, replay/backtest harness, and analytics dashboard.
-
-A project to learn.
 
 ## What This Is
 
@@ -79,7 +77,7 @@ exchange-simulator/
 │   ├── unit/           # Catch2 unit tests
 │   ├── integration/    # Multi-component tests
 │   └── benchmarks/     # Google Benchmark, latency measurement
-├── dashboard/          # React web UI (friend's domain)
+├── dashboard/          # React web UI
 │   ├── src/
 │   └── public/
 ├── scripts/            # Build, benchmark, flamegraph generation
@@ -133,31 +131,27 @@ exchange-simulator/
 
 ## Goals
 
-### Performance
-- **Throughput**: 1M+ orders/sec (single symbol, single thread)
-- **p50 Latency**: <1µs order-to-ack
-- **p99 Latency**: <10µs including worst-case matching
-- **Memory**: <64 bytes per order (cache-line aligned)
+See [ROADMAP.md](ROADMAP.md) for detailed phased plan.
 
-### Correctness
-- **Deterministic Replay**: 100% reproducible from event journal
+### Phase 1-3 Targets (Months 1-2)
+- **Throughput**: 10K-50K orders/sec
+- **Correctness**: All unit tests pass, edge cases covered
+- **Tooling**: CI green, basic benchmarks running
+
+### Phase 4-6 Targets (Months 2-4)
+- **Throughput**: 100K-500K orders/sec  
+- **p50 Latency**: <50µs
+- **Architecture**: Memory pool, cache-aligned structs, SPSC queue
+
+### Final Targets (Months 4-6)
+- **Throughput**: 500K+ orders/sec (stretch: 1M+)
+- **p50 Latency**: <10µs (stretch: <1µs)
+- **p99 Latency**: <100µs (stretch: <10µs)
+- **Deterministic Replay**: 100% reproducible
+
+### Always
 - **FIFO Matching**: Price-time priority enforced
-- **Concurrency**: Lock-free queues, no data races
-
-### Observability
-- **Latency Histograms**: p50/p90/p99/p99.9 percentiles
-- **Throughput Metrics**: Orders/sec, matches/sec
-- **Flamegraphs**: CPU profiling with perf
-
-## Target Metrics
-
-| Metric | Target | Measurement |
-|--------|--------|-------------|
-| Throughput | 1M+ orders/sec | Benchmark harness |
-| p50 Latency | <1µs | rdtsc histogram |
-| p99 Latency | <10µs | rdtsc histogram |
-| Memory/Order | <64 bytes | sizeof + pool overhead |
-| Replay Determinism | 100% | Hash comparison |
+- **Observability**: Latency histograms, throughput metrics, flamegraphs
 
 ## Build
 
