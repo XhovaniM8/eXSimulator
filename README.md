@@ -1,6 +1,8 @@
-# Exchange Simulator
+# eXSimulator
 
 A low-latency, deterministic limit-order-book exchange with matching engine, simulated trading agents, replay/backtest harness, and analytics dashboard.
+
+A project to learn.
 
 ## What This Is
 
