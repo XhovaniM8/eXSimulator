@@ -2,10 +2,6 @@
 
 Phased development plan with realistic goals for learning.
 
-## Philosophy
-
-**Correctness first, performance second.** Get it working, then make it fast. Premature optimization is the root of all evil.
-
 ## Phase 1: Foundation (Weeks 1-2)
 **Goal: Basic matching that compiles and runs**
 
