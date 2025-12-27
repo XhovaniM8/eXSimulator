@@ -153,6 +153,131 @@ See [ROADMAP.md](ROADMAP.md) for detailed phased plan.
 - **FIFO Matching**: Price-time priority enforced
 - **Observability**: Latency histograms, throughput metrics, flamegraphs
 
+---
+
+## Future Additions
+
+> **Prerequisites**: Core matching engine stable, throughput ≥100K orders/sec, all unit tests passing, basic UI functional.
+
+These extensions move the simulator from "toy project" to something that models real market dynamics. Most open-source exchange simulators ignore these - implementing them is what makes this project unique.
+
+### Realistic Market Microstructure
+
+| Feature | Description | Why It Matters |
+|---------|-------------|----------------|
+| **Adverse Selection Model** | Informed vs. uninformed trader classification; market makers get "picked off" by informed flow | Models the actual P&L dynamics of market making - why spreads exist |
+| **Queue Position Uncertainty** | Simulate not knowing your exact queue position; probabilistic fill modeling | Real traders don't know where they are in the queue - critical for strategy backtesting |
+| **Latency Arbitrage Scenarios** | Configurable per-agent network delays; "slow" vs. "fast" participant dynamics | Demonstrates understanding of the latency arms race |
+
+### Advanced Order Types
+
+| Order Type | Behavior | Implementation Notes |
+|------------|----------|----------------------|
+| **IOC** (Immediate or Cancel) | Fill what's available, cancel remainder | Modify matching loop to not rest unfilled qty |
+| **FOK** (Fill or Kill) | Fill entirely or reject | Pre-check available liquidity before matching |
+| **Iceberg / Hidden** | Display qty < total qty; replenish on fill | Separate display_qty field; re-add to queue on partial |
+| **Stop / Stop-Limit** | Trigger on price threshold | Maintain stop book; scan on each trade |
+| **Pegged Orders** | Price tracks BBO with offset | Re-price on book updates; cancel/replace internally |
+
+### Auction Mechanisms
+
+Most simulators run continuous matching only. Real exchanges use auctions for critical moments:
+
+| Auction Type | When Used | Key Mechanics |
+|--------------|-----------|---------------|
+| **Opening Auction** | Market open | Collect orders, calculate uncrossing price, single multilateral match |
+| **Closing Auction** | Market close | Same as opening; closing price is reference for derivatives/ETFs |
+| **Volatility Auction** | Circuit breaker triggered | Pause continuous trading, run call auction to find new equilibrium |
+| **Intraday Auction** | Scheduled or on-demand | Liquidity aggregation for illiquid names |
+
+Implementation requires: auction order book (no immediate matching), uncrossing price algorithm (maximize volume, minimize imbalance), state machine for trading phases.
+
+### Multi-Venue & Smart Order Routing
+
+Simulate a fragmented market with multiple venues:
+
+```
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│  Venue A    │     │  Venue B    │     │  Venue C    │
+│  Low fees   │     │  Deep book  │     │  Fast       │
+│  Slow       │     │  High fees  │     │  Thin book  │
+└─────────────┘     └─────────────┘     └─────────────┘
+       │                  │                   │
+       └──────────────────┼───────────────────┘
+                          ▼
+                 ┌─────────────────┐
+                 │  Smart Order    │
+                 │  Router (SOR)   │
+                 └─────────────────┘
+```
+
+| SOR Strategy | Logic | Demonstrates |
+|--------------|-------|--------------|
+| **Fee Optimization** | Route to minimize maker/taker fees | Understanding of exchange economics |
+| **Latency-Aware** | Prefer faster venues for time-sensitive orders | Real HFT concern |
+| **Liquidity Seeking** | Sweep multiple venues, size-weighted | Basic SOR functionality |
+| **Anti-Gaming** | Randomize routing to avoid detection | Adversarial thinking |
+
+### Realistic Fill Simulation (Backtesting Mode)
+
+Replace naive "order = fill" with realistic execution modeling:
+
+| Model | Description | Parameters |
+|-------|-------------|------------|
+| **Queue Position Model** | Track simulated queue position; fill only when volume trades through | Join position, cancel rates ahead |
+| **Fill Probability** | Probabilistic fills based on order size vs. level depth | Calibrated from real data |
+| **Market Impact** | Your order moves the price; larger orders = more slippage | Permanent vs. temporary impact coefficients |
+| **Partial Fill Dynamics** | Model realistic partial fill sequences | Fill rate decay over time |
+
+### Risk Engine (Pre-Trade)
+
+Real exchanges reject bad orders before they hit the book:
+
+| Check | Description | Action |
+|-------|-------------|--------|
+| **Fat Finger** | Price > X% away from reference | Reject |
+| **Position Limits** | Agent position would exceed max | Reject |
+| **Order Size Limits** | Single order > max notional | Reject |
+| **Rate Limits** | Orders/sec exceeds threshold | Reject or throttle |
+| **Credit Check** | Notional exceeds available margin | Reject |
+
+### FPGA Acceleration (Long-Term)
+
+> **Prerequisites**: Software implementation stable, latency profiled, hot path identified.
+
+Design the engine now with hardware offload in mind:
+
+| Component | Software Baseline | FPGA Target | Notes |
+|-----------|-------------------|-------------|-------|
+| **Order Parsing** | ~500ns | <100ns | Fixed-format binary protocol |
+| **Book Lookup** | ~200ns | <50ns | Content-addressable memory |
+| **Match + Fill** | ~1µs | <200ns | Pipeline the comparison tree |
+| **Market Data Fan-out** | ~5µs | <500ns | Multicast in fabric |
+
+**Acceleration Boundary**: Define a clean interface between "control plane" (stays in software) and "data plane" (moves to FPGA):
+
+```
+┌─────────────────────────────────────────┐
+│           Software (Control)            │
+│  - Agent logic, risk parameters         │
+│  - Symbology, reference data            │
+│  - Slow-path order types (stops, etc.)  │
+└─────────────────────────────────────────┘
+                    │
+          ══════════════════════  ← Acceleration Boundary
+                    │
+┌─────────────────────────────────────────┐
+│            FPGA (Data Plane)            │
+│  - Order ingress parsing                │
+│  - Book storage + matching              │
+│  - Market data egress                   │
+└─────────────────────────────────────────┘
+```
+
+Target boards: Alveo U50/U250, or Intel Stratix 10. Use a framework like Vitis HLS or write raw RTL for tightest control.
+
+---
+
 ## Build
 
 ```bash
