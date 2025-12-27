@@ -120,10 +120,11 @@ size_t MatchingEngine::process_queue() {
 }
 
 bool MatchingEngine::process_one() {
-    InboundMessage msg;
-    if (!inbound_queue_->try_pop(msg)) {
+    auto msg_opt = inbound_queue_->try_pop();
+    if (!msg_opt) {
         return false;
     }
+    InboundMessage msg = *msg_opt;
     
     ++stats_.messages_processed;
     
