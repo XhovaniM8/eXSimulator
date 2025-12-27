@@ -1,0 +1,85 @@
+# .github/workflows/build-and-test.yml
+#
+# Main CI pipeline: build, test, sanitizers
+# Runs on every push and PR
+#
+name: Build & Test
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  BUILD_TYPE: Release
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build
+        
+    - name: Cache Catch2
+      id: cache-catch2
+      uses: actions/cache@v4
+      with:
+        path: ~/catch2
+        key: catch2-v3.5.0
+        
+    - name: Install Catch2
+      if: steps.cache-catch2.outputs.cache-hit != 'true'
+      run: |
+        git clone --branch v3.5.0 --depth 1 https://github.com/catchorg/Catch2.git
+        cd Catch2
+        cmake -B build -S . -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=~/catch2
+        cmake --build build --target install
+        
+    - name: Configure CMake
+      run: |
+        cmake -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+          -DCMAKE_PREFIX_PATH=~/catch2 \
+          -DCMAKE_CXX_FLAGS="-Wno-interference-size" \
+          -DBUILD_TESTS=ON
+          
+    - name: Build
+      run: cmake --build build --config ${{ env.BUILD_TYPE }}
+      
+    - name: Run unit tests
+      working-directory: build
+      run: ctest --output-on-failure --timeout 120
+
+  sanitizers:
+    runs-on: ubuntu-24.04
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build
+        
+    - name: Configure CMake (Debug + ASan + UBSan)
+      run: |
+        cmake -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=Debug \
+          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -Wno-interference-size"
+          
+    - name: Build
+      run: cmake --build build
+      
+    - name: Run with sanitizers
+      working-directory: build
+      run: |
+        export ASAN_OPTIONS=detect_leaks=1
+        if [ -f bin/test_order_book ]; then ./bin/test_order_book; fi
+        if [ -f bin/feature_test ]; then ./bin/feature_test; fi
+        ./bin/exchange_sim --symbols 2 --agents 10 --ticks 1000 || true
