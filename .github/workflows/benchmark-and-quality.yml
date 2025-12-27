@@ -1,0 +1,107 @@
+# .github/workflows/benchmark-and-quality.yml
+#
+# Performance benchmarks and code quality checks
+# Benchmarks only run on main branch pushes
+#
+name: Benchmarks & Quality
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-24.04
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build
+        
+    - name: Cache Google Benchmark
+      id: cache-gbench
+      uses: actions/cache@v4
+      with:
+        path: ~/benchmark
+        key: benchmark-v1.8.3
+        
+    - name: Install Google Benchmark
+      if: steps.cache-gbench.outputs.cache-hit != 'true'
+      run: |
+        git clone --branch v1.8.3 --depth 1 https://github.com/google/benchmark.git
+        cd benchmark
+        cmake -B build -S . -DBENCHMARK_ENABLE_TESTING=OFF -DCMAKE_INSTALL_PREFIX=~/benchmark
+        cmake --build build --target install
+        
+    - name: Configure CMake
+      run: |
+        cmake -B build -G Ninja \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_PREFIX_PATH=~/benchmark \
+          -DCMAKE_CXX_FLAGS="-Wno-interference-size" \
+          -DBUILD_BENCHMARKS=ON
+          
+    - name: Build
+      run: cmake --build build
+      
+    - name: Run benchmarks
+      run: |
+        if [ -f build/bin/benchmarks ]; then
+          build/bin/benchmarks --benchmark_format=json > benchmark_results.json
+          echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          build/bin/benchmarks --benchmark_format=console >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        fi
+        
+    - name: Track benchmark history
+      uses: benchmark-action/github-action-benchmark@v1
+      if: hashFiles('benchmark_results.json') != ''
+      with:
+        tool: 'googlecpp'
+        output-file-path: benchmark_results.json
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        auto-push: true
+        alert-threshold: '150%'
+        comment-on-alert: true
+
+  code-quality:
+    runs-on: ubuntu-24.04
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install tools
+      run: sudo apt-get install -y cppcheck clang-format
+    
+    - name: Static analysis (cppcheck)
+      run: |
+        cppcheck --enable=warning,style,performance \
+          --error-exitcode=0 \
+          --suppress=missingIncludeSystem \
+          --inline-suppr \
+          -I include \
+          src/ include/ 2>&1 | tee cppcheck.txt
+        
+        echo "## Static Analysis" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        head -50 cppcheck.txt >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+
+    - name: Check formatting
+      run: |
+        find src include -name '*.cpp' -o -name '*.hpp' | \
+          xargs clang-format --dry-run --Werror 2>&1 || \
+          echo "::warning::Code formatting issues found. Run: find src include -name '*.cpp' -o -name '*.hpp' | xargs clang-format -i"
+
+    - name: Documentation check
+      run: |
+        test -f README.md || (echo "::error::Missing README.md" && exit 1)
+        test -f ROADMAP.md || (echo "::error::Missing ROADMAP.md" && exit 1)
+        echo "✓ Required docs present"
