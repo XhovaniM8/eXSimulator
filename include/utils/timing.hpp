@@ -40,15 +40,15 @@ public:
     // Get current time in nanoseconds since epoch
     static inline uint64_t now_ns() {
         auto now = std::chrono::high_resolution_clock::now();
-        return std::chrono::duration_cast<std::chrono::nanoseconds>(
-            now.time_since_epoch()).count();
+        return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+            now.time_since_epoch()).count());
     }
     
     // Get current time in microseconds since epoch
     static inline uint64_t now_us() {
         auto now = std::chrono::high_resolution_clock::now();
-        return std::chrono::duration_cast<std::chrono::microseconds>(
-            now.time_since_epoch()).count();
+        return static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::microseconds>(
+            now.time_since_epoch()).count());
     }
     
     // Calibrate TSC to nanoseconds
@@ -69,18 +69,18 @@ public:
         auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t2 - t1).count();
         uint64_t cycles = tsc2 - tsc1;
         
-        cycles_per_ns_ = static_cast<double>(cycles) / ns;
-        ns_per_cycle_ = static_cast<double>(ns) / cycles;
+        cycles_per_ns_ = static_cast<double>(cycles) / static_cast<double>(ns);
+        ns_per_cycle_ = static_cast<double>(ns) / static_cast<double>(cycles);
     }
     
     // Convert cycles to nanoseconds
     static inline uint64_t cycles_to_ns(uint64_t cycles) {
-        return static_cast<uint64_t>(cycles * ns_per_cycle_);
+        return static_cast<uint64_t>(static_cast<double>(cycles) * ns_per_cycle_);
     }
     
     // Convert nanoseconds to cycles
     static inline uint64_t ns_to_cycles(uint64_t ns) {
-        return static_cast<uint64_t>(ns * cycles_per_ns_);
+        return static_cast<uint64_t>(static_cast<double>(ns) * cycles_per_ns_);
     }
     
     // Get calibrated frequency
@@ -126,8 +126,8 @@ public:
     
     uint64_t elapsed_cycles() const { return elapsed_cycles_; }
     uint64_t elapsed_ns() const { return Timing::cycles_to_ns(elapsed_cycles_); }
-    double elapsed_us() const { return elapsed_ns() / 1000.0; }
-    double elapsed_ms() const { return elapsed_ns() / 1000000.0; }
+    double elapsed_us() const { return static_cast<double>(elapsed_ns()) / 1000.0; }
+    double elapsed_ms() const { return static_cast<double>(elapsed_ns()) / 1000000.0; }
     
 private:
     uint64_t start_ = 0;

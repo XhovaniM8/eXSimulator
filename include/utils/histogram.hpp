@@ -42,7 +42,7 @@ public:
     uint64_t percentile(double p) const {
         if (count_ == 0) return 0;
         
-        uint64_t target = static_cast<uint64_t>(count_ * p / 100.0);
+        uint64_t target = static_cast<uint64_t>(static_cast<double>(count_) * p / 100.0);
         uint64_t cumulative = 0;
         
         for (size_t i = 0; i < NUM_BUCKETS; ++i) {
@@ -66,7 +66,7 @@ public:
     uint64_t sum() const { return sum_; }
     uint64_t min() const { return count_ > 0 ? min_ : 0; }
     uint64_t max() const { return max_; }
-    double mean() const { return count_ > 0 ? static_cast<double>(sum_) / count_ : 0; }
+    double mean() const { return count_ > 0 ? static_cast<double>(sum_) / static_cast<double>(count_) : 0; }
     
     // Merge another histogram into this one
     void merge(const LatencyHistogram& other) {
@@ -100,7 +100,7 @@ private:
         if (value >= MAX_VALUE) return NUM_BUCKETS - 1;
         
         // Log2 of value, mapped to remaining buckets
-        unsigned int log = 63 - __builtin_clzll(value);
+        unsigned int log = static_cast<unsigned int>(63 - __builtin_clzll(value));
         size_t bucket = 128 + (log - 7) * 16 + ((value >> (log - 4)) & 0xF);
         return std::min(bucket, NUM_BUCKETS - 1);
     }

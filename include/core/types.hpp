@@ -25,7 +25,15 @@ struct Symbol {
     
     Symbol() = default;
     explicit Symbol(const char* s) {
-        std::strncpy(data, s, SYMBOL_SIZE - 1);
+        size_t len = 0;
+        while (s[len] && len < SYMBOL_SIZE - 1) {
+            data[len] = s[len];
+            ++len;
+        }
+        while (len < SYMBOL_SIZE) {
+            data[len] = '\0';
+            ++len;
+        }
     }
     
     bool operator==(const Symbol& other) const {

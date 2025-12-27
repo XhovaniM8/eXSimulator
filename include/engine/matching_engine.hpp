@@ -21,12 +21,14 @@ enum class MessageType : uint8_t {
 
 // Generic message wrapper for queue
 struct InboundMessage {
+    InboundMessage() : type(MessageType::NewOrder) {}
+    
     MessageType type;
-    union {
-        struct { Order order; } new_order;
-        struct { OrderId order_id; Symbol symbol; } cancel;
-        struct { OrderId order_id; Symbol symbol; Price new_price; Quantity new_qty; } replace;
-    };
+    Order order;  // For new orders
+    OrderId order_id;  // For cancel/replace
+    Symbol symbol;  // For cancel/replace
+    Price new_price;  // For replace
+    Quantity new_qty;  // For replace
 };
 
 // Engine configuration
@@ -102,14 +104,9 @@ public:
 private:
     EngineConfig config_;
     
-    // Order books by symbol
-    std::unordered_map<Symbol, std::unique_ptr<OrderBook>, 
-                       std::hash<std::string>> books_;
-    
-    // Symbol lookup helper (hashing)
+    // Symbol hash function
     struct SymbolHash {
         size_t operator()(const Symbol& s) const {
-            // FNV-1a hash
             size_t hash = 14695981039346656037ULL;
             for (size_t i = 0; i < SYMBOL_SIZE; ++i) {
                 hash ^= static_cast<size_t>(s.data[i]);
@@ -118,6 +115,9 @@ private:
             return hash;
         }
     };
+    
+    // Order books by symbol
+    std::unordered_map<Symbol, std::unique_ptr<OrderBook>, SymbolHash> books_;
     std::unordered_map<Symbol, OrderBook*, SymbolHash> symbol_to_book_;
     
     // Inbound message queue
@@ -136,6 +136,11 @@ private:
 };
 
 // Helper to run engine in dedicated thread
+// Note: Currently a synchronous wrapper. Full threading support would require:
+//   - A worker thread running engine.process_one() in a loop
+//   - Proper synchronization of start/stop with the worker
+//   - Thread-safe shutdown signaling
+// For now, users can call engine.process_one() directly from their own threads.
 class EngineRunner {
 public:
     explicit EngineRunner(MatchingEngine& engine);
@@ -148,7 +153,6 @@ public:
 private:
     MatchingEngine& engine_;
     std::atomic<bool> running_;
-    // Thread handle would go here
 };
 
 }  // namespace exchange

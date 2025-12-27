@@ -3,6 +3,10 @@
 
 #include <cstdio>
 
+#ifdef _WIN32
+#include <io.h>  // for _fileno, _commit
+#endif
+
 namespace exchange {
 
 // Simple CRC32 implementation
@@ -23,7 +27,7 @@ static void init_crc32_table() {
 }
 
 EventJournal::EventJournal(const std::string& path)
-    : path_(path), sequence_(0)
+    : path_(path), sequence_(0), file_size_(0)
 {
     init_crc32_table();
     
@@ -51,8 +55,10 @@ void EventJournal::log_order(const Order& order, EventType type) {
     jo.quantity = order.quantity;
     jo.timestamp = order.timestamp;
     
-    write_header(type, sizeof(JournalOrder));
+    uint32_t checksum = compute_checksum(&jo, sizeof(jo));
+    write_header(type, sizeof(JournalOrder), checksum);
     file_.write(reinterpret_cast<const char*>(&jo), sizeof(jo));
+    file_size_ += sizeof(JournalHeader) + sizeof(jo);
 }
 
 void EventJournal::log_trade(const Trade& trade) {
@@ -66,18 +72,20 @@ void EventJournal::log_trade(const Trade& trade) {
     jt.aggressor_side = trade.aggressor_side;
     std::memset(jt._pad, 0, sizeof(jt._pad));
     
-    write_header(EventType::Trade, sizeof(JournalTrade));
+    uint32_t checksum = compute_checksum(&jt, sizeof(jt));
+    write_header(EventType::Trade, sizeof(JournalTrade), checksum);
     file_.write(reinterpret_cast<const char*>(&jt), sizeof(jt));
+    file_size_ += sizeof(JournalHeader) + sizeof(jt);
 }
 
-void EventJournal::write_header(EventType type, uint32_t payload_size) {
+void EventJournal::write_header(EventType type, uint32_t payload_size, uint32_t checksum) {
     JournalHeader header;
     header.sequence = sequence_++;
     header.timestamp = Timing::now_ns();
     header.event_type = type;
     std::memset(header.reserved, 0, sizeof(header.reserved));
     header.payload_size = payload_size;
-    header.checksum = 0;  // TODO: compute actual checksum
+    header.checksum = checksum;
     
     file_.write(reinterpret_cast<const char*>(&header), sizeof(header));
 }
@@ -99,12 +107,22 @@ void EventJournal::flush() {
 
 void EventJournal::sync() {
     file_.flush();
-    // TODO: call fsync on underlying fd
+#ifdef _WIN32
+    // Windows: use _commit to flush to disk
+    int fd = _fileno(reinterpret_cast<FILE*>(file_.rdbuf()));
+    if (fd != -1) {
+        _commit(fd);
+    }
+#else
+    // POSIX: use fsync
+    // Note: std::ofstream doesn't expose fd easily
+    // For production, consider using POSIX file APIs directly
+    // Currently just flushes to OS buffers
+#endif
 }
 
 size_t EventJournal::size() const {
-    // TODO: return file size
-    return 0;
+    return file_size_;
 }
 
 void EventJournal::close() {
@@ -148,6 +166,7 @@ bool JournalReader::read_next(JournalHeader& header,
     }
     
     last_header_ = header;
+    last_payload_ = payload;
     last_valid_ = true;
     return true;
 }
@@ -177,12 +196,26 @@ void JournalReader::reset() {
 }
 
 bool JournalReader::has_more() const {
-    return file_ && file_.peek() != EOF;
+    if (!file_) return false;
+    std::ifstream& f = const_cast<std::ifstream&>(file_);
+    return f.peek() != EOF;
 }
 
 bool JournalReader::verify_checksum() const {
-    // TODO: implement checksum verification
-    return last_valid_;
+    if (!last_valid_ || last_payload_.empty()) {
+        return false;
+    }
+    
+    // Recompute checksum using same algorithm as EventJournal
+    const uint8_t* p = last_payload_.data();
+    uint32_t crc = 0xFFFFFFFF;
+    
+    for (size_t i = 0; i < last_payload_.size(); ++i) {
+        crc = crc32_table[(crc ^ p[i]) & 0xFF] ^ (crc >> 8);
+    }
+    
+    uint32_t computed = crc ^ 0xFFFFFFFF;
+    return computed == last_header_.checksum;
 }
 
 uint64_t JournalReader::position() const {
@@ -255,7 +288,41 @@ bool ReplayHarness::step() {
 }
 
 bool ReplayHarness::verify_against(const std::string& expected_path) {
-    // TODO: implement verification
+    if (!reader_) return false;
+    
+    JournalReader expected(expected_path);
+    reader_->reset();
+    
+    JournalHeader header1, header2;
+    std::vector<uint8_t> payload1, payload2;
+    
+    while (true) {
+        bool has1 = reader_->read_next(header1, payload1);
+        bool has2 = expected.read_next(header2, payload2);
+        
+        // Both should end at the same time
+        if (has1 != has2) return false;
+        if (!has1) break;  // Both finished successfully
+        
+        // Verify checksums
+        if (!reader_->verify_checksum() || !expected.verify_checksum()) {
+            return false;
+        }
+        
+        // Compare headers (except timestamp which may vary)
+        if (header1.sequence != header2.sequence ||
+            header1.event_type != header2.event_type ||
+            header1.payload_size != header2.payload_size ||
+            header1.checksum != header2.checksum) {
+            return false;
+        }
+        
+        // Compare payloads
+        if (payload1 != payload2) {
+            return false;
+        }
+    }
+    
     return true;
 }
 

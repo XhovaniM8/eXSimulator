@@ -133,8 +133,10 @@ public:
             return ::operator new(size);
         }
         
-        size_t class_idx = size_class(size);
-        // TODO: Implement size-class based allocation
+        // Simple malloc wrapper - no pooling implemented yet
+        // A full implementation would maintain size-class segregated free lists
+        // for fast O(1) allocation without system calls
+        (void)size_class(size);
         return ::operator new(size);
     }
     
@@ -144,7 +146,8 @@ public:
             return;
         }
         
-        // TODO: Return to appropriate pool
+        // Simple free wrapper - no pooling implemented yet
+        // A full implementation would return memory to the appropriate size-class pool
         ::operator delete(ptr);
     }
     

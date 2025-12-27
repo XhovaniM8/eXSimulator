@@ -49,7 +49,7 @@ void MarketMaker::update_quotes(MatchingEngine& engine) {
     }
     
     // Adjust for inventory
-    Price skew = static_cast<Price>(position_ * config_.inventory_skew * PRICE_SCALE);
+    Price skew = static_cast<Price>(static_cast<double>(position_) * config_.inventory_skew * PRICE_SCALE);
     
     Price bid = fair - config_.half_spread - skew;
     Price ask = fair + config_.half_spread - skew;
