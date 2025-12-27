@@ -32,7 +32,7 @@ static void BM_SPSCQueue_Pop(benchmark::State& state) {
     }
     
     for (auto _ : state) {
-        int value;
+        int value = 0;
         bool success = queue.try_pop(value);
         if (!success) {
             // Queue empty, refill it
@@ -54,7 +54,7 @@ static void BM_SPSCQueue_RoundTrip(benchmark::State& state) {
     int value = 42;
     for (auto _ : state) {
         queue.try_push(value);
-        int result;
+        int result = 0;
         queue.try_pop(result);
         benchmark::DoNotOptimize(result);
     }
@@ -98,7 +98,7 @@ static void BM_SPSCQueue_BatchPop(benchmark::State& state) {
         state.ResumeTiming();
         
         for (int i = 0; i < batch_size; ++i) {
-            int value;
+            int value = 0;
             queue.try_pop(value);
             benchmark::DoNotOptimize(value);
         }
@@ -200,7 +200,7 @@ static void BM_SPSCQueue_Contention(benchmark::State& state) {
     int push_val = 0;
     for (auto _ : state) {
         queue.try_push(push_val++);
-        int pop_val;
+        int pop_val = 0;
         queue.try_pop(pop_val);
         benchmark::DoNotOptimize(pop_val);
     }
@@ -209,4 +209,3 @@ static void BM_SPSCQueue_Contention(benchmark::State& state) {
 }
 BENCHMARK(BM_SPSCQueue_Contention);
 
-BENCHMARK_MAIN();

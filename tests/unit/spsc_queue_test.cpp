@@ -14,7 +14,7 @@ TEST_CASE("SPSCQueue: Basic push and pop", "[spsc_queue]") {
     REQUIRE_FALSE(queue.empty());
     REQUIRE(queue.size() == 1);
     
-    int value;
+    int value = 0;
     success = queue.try_pop(value);
     REQUIRE(success);
     REQUIRE(value == 42);
@@ -33,7 +33,7 @@ TEST_CASE("SPSCQueue: Multiple elements", "[spsc_queue]") {
     
     // Pop and verify order
     for (int i = 0; i < 10; ++i) {
-        int value;
+        int value = 0;
         REQUIRE(queue.try_pop(value));
         REQUIRE(value == i);
     }
@@ -53,7 +53,7 @@ TEST_CASE("SPSCQueue: Full queue", "[spsc_queue]") {
     REQUIRE_FALSE(queue.try_push(999));
     
     // Pop one element
-    int value;
+    int value = 0;
     REQUIRE(queue.try_pop(value));
     REQUIRE(value == 0);
     
@@ -64,7 +64,7 @@ TEST_CASE("SPSCQueue: Full queue", "[spsc_queue]") {
 TEST_CASE("SPSCQueue: Pop from empty queue", "[spsc_queue]") {
     SPSCQueue<int, 16> queue;
     
-    int value;
+    int value = 0;
     bool success = queue.try_pop(value);
     REQUIRE_FALSE(success);
 }
@@ -87,7 +87,7 @@ TEST_CASE("SPSCQueue: Front peek", "[spsc_queue]") {
     REQUIRE_FALSE(queue.empty());
     
     // Pop and verify
-    int value;
+    int value = 0;
     queue.try_pop(value);
     REQUIRE(value == 42);
 }
@@ -109,7 +109,7 @@ TEST_CASE("SPSCQueue: Wrap around", "[spsc_queue]") {
         
         // Empty queue
         for (int i = 0; i < 7; ++i) {
-            int value;
+            int value = 0;
             REQUIRE(queue.try_pop(value));
             REQUIRE(value == i + cycle * 10);
         }
@@ -130,7 +130,7 @@ TEST_CASE("SPSCQueue: Struct element", "[spsc_queue]") {
     TestStruct data{42, 3.14, 'x'};
     REQUIRE(queue.try_push(data));
     
-    TestStruct result;
+    TestStruct result{};
     REQUIRE(queue.try_pop(result));
     REQUIRE(result.a == 42);
     REQUIRE(result.b == 3.14);
@@ -145,7 +145,7 @@ TEST_CASE("SPSCQueue: Interleaved push and pop", "[spsc_queue]") {
         REQUIRE(queue.try_push(i));
         
         if (i % 2 == 0) {
-            int value;
+            int value = 0;
             REQUIRE(queue.try_pop(value));
         }
     }
@@ -155,7 +155,7 @@ TEST_CASE("SPSCQueue: Interleaved push and pop", "[spsc_queue]") {
     
     // Pop remaining elements
     for (int i = 0; i < 10; ++i) {
-        int value;
+        int value = 0;
         REQUIRE(queue.try_pop(value));
     }
     

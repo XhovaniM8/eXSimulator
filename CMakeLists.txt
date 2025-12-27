@@ -22,6 +22,7 @@ add_compile_options(
     -Wno-unused-parameter
     -Wconversion -Wsign-conversion
     -Wshadow -Wdouble-promotion
+    -Wno-interference-size  # Suppress interference size warning for std::hardware_destructive_interference_size
     -fno-exceptions  # HFT style: no exceptions on hot path
     -fno-rtti        # HFT style: no RTTI overhead
 )

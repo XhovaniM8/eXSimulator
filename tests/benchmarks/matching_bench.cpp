@@ -14,7 +14,9 @@ static void BM_MatchingEngine_SubmitOrder(benchmark::State& state) {
     
     OrderId order_id = 1;
     for (auto _ : state) {
-        Order order(order_id++, symbol, Side::Buy, 10000 + (order_id % 100), 100);
+        Price price = static_cast<Price>(10000 + (order_id % 100));
+        Order order(order_id, symbol, Side::Buy, price, 100);
+        order_id++;
         auto result = engine.submit_order(order);
         benchmark::DoNotOptimize(result);
     }
@@ -32,8 +34,8 @@ static void BM_MatchingEngine_Matching(benchmark::State& state) {
     engine.add_symbol(symbol);
     
     // Pre-populate with sell orders
-    for (int i = 0; i < 100; ++i) {
-        Order sell(i, symbol, Side::Sell, 10100 + i, 100);
+    for (OrderId i = 0; i < 100; ++i) {
+        Order sell(i, symbol, Side::Sell, static_cast<Price>(10100 + i), 100);
         engine.submit_order(sell);
     }
     
@@ -108,12 +110,13 @@ static void BM_MatchingEngine_MultiSymbol(benchmark::State& state) {
     
     OrderId order_id = 1;
     for (auto _ : state) {
-        int symbol_idx = order_id % 10;
+        int symbol_idx = static_cast<int>(order_id % 10);
         char symbol_str[9];
         snprintf(symbol_str, sizeof(symbol_str), "SYM%d", symbol_idx);
         Symbol symbol(symbol_str);
         
-        Order order(order_id++, symbol, Side::Buy, 10000, 100);
+        Order order(order_id, symbol, Side::Buy, 10000, 100);
+        order_id++;
         auto result = engine.submit_order(order);
         benchmark::DoNotOptimize(result);
     }
@@ -132,7 +135,9 @@ static void BM_MatchingEngine_EnqueueOrder(benchmark::State& state) {
     
     OrderId order_id = 1;
     for (auto _ : state) {
-        Order order(order_id++, symbol, Side::Buy, 10000 + (order_id % 100), 100);
+        Price price = static_cast<Price>(10000 + (order_id % 100));
+        Order order(order_id, symbol, Side::Buy, price, 100);
+        order_id++;
         bool success = engine.enqueue_order(order);
         benchmark::DoNotOptimize(success);
     }
@@ -152,8 +157,8 @@ static void BM_MatchingEngine_ProcessQueue(benchmark::State& state) {
     for (auto _ : state) {
         state.PauseTiming();
         // Enqueue some orders
-        for (int i = 0; i < 100; ++i) {
-            Order order(i, symbol, Side::Buy, 10000 + i, 100);
+        for (OrderId i = 0; i < 100; ++i) {
+            Order order(i, symbol, Side::Buy, static_cast<Price>(10000 + i), 100);
             engine.enqueue_order(order);
         }
         state.ResumeTiming();
@@ -181,7 +186,7 @@ static void BM_MatchingEngine_WithCallbacks(benchmark::State& state) {
     });
     
     // Pre-populate with sell orders
-    for (int i = 0; i < 100; ++i) {
+    for (OrderId i = 0; i < 100; ++i) {
         Order sell(i, symbol, Side::Sell, 10100, 100);
         engine.submit_order(sell);
     }
@@ -197,4 +202,3 @@ static void BM_MatchingEngine_WithCallbacks(benchmark::State& state) {
 }
 BENCHMARK(BM_MatchingEngine_WithCallbacks);
 
-BENCHMARK_MAIN();

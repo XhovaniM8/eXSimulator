@@ -142,7 +142,7 @@ public:
     
     uint64_t count() const { return count_; }
     uint64_t sum() const { return sum_; }
-    double mean() const { return count_ > 0 ? static_cast<double>(sum_) / count_ : 0; }
+    double mean() const { return count_ > 0 ? static_cast<double>(sum_) / static_cast<double>(count_) : 0; }
     
 private:
     uint64_t count_;

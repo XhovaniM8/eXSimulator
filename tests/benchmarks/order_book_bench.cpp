@@ -12,7 +12,9 @@ static void BM_OrderBook_AddLimitOrder(benchmark::State& state) {
     
     OrderId order_id = 1;
     for (auto _ : state) {
-        Order order(order_id++, symbol, Side::Buy, 10000 + (order_id % 100), 100);
+        Price price = static_cast<Price>(10000 + (order_id % 100));
+        Order order(order_id, symbol, Side::Buy, price, 100);
+        order_id++;
         auto result = book.add_order(order);
         benchmark::DoNotOptimize(result);
     }
@@ -28,8 +30,8 @@ static void BM_OrderBook_Matching(benchmark::State& state) {
     OrderBook book(symbol, config);
     
     // Pre-populate with sell orders
-    for (int i = 0; i < 100; ++i) {
-        Order sell(i, symbol, Side::Sell, 10100 + i, 100);
+    for (OrderId i = 0; i < 100; ++i) {
+        Order sell(i, symbol, Side::Sell, static_cast<Price>(10100 + i), 100);
         book.add_order(sell);
     }
     
@@ -91,9 +93,9 @@ static void BM_OrderBook_BestBidAsk(benchmark::State& state) {
     OrderBook book(symbol, config);
     
     // Pre-populate orderbook
-    for (int i = 0; i < 10; ++i) {
-        Order buy(i, symbol, Side::Buy, 10000 - i * 10, 100);
-        Order sell(i + 100, symbol, Side::Sell, 10100 + i * 10, 100);
+    for (OrderId i = 0; i < 10; ++i) {
+        Order buy(i, symbol, Side::Buy, static_cast<Price>(10000 - i * 10), 100);
+        Order sell(i + 100, symbol, Side::Sell, static_cast<Price>(10100 + i * 10), 100);
         book.add_order(buy);
         book.add_order(sell);
     }
@@ -116,9 +118,9 @@ static void BM_OrderBook_GetDepth(benchmark::State& state) {
     OrderBook book(symbol, config);
     
     // Pre-populate orderbook with depth
-    for (int i = 0; i < 50; ++i) {
-        Order buy(i, symbol, Side::Buy, 10000 - i, 100);
-        Order sell(i + 100, symbol, Side::Sell, 10100 + i, 100);
+    for (OrderId i = 0; i < 50; ++i) {
+        Order buy(i, symbol, Side::Buy, static_cast<Price>(10000 - i), 100);
+        Order sell(i + 100, symbol, Side::Sell, static_cast<Price>(10100 + i), 100);
         book.add_order(buy);
         book.add_order(sell);
     }
@@ -158,8 +160,8 @@ static void BM_OrderBook_IOCOrders(benchmark::State& state) {
     OrderBook book(symbol, config);
     
     // Pre-populate with liquidity
-    for (int i = 0; i < 10; ++i) {
-        Order sell(i, symbol, Side::Sell, 10100 + i, 100);
+    for (OrderId i = 0; i < 10; ++i) {
+        Order sell(i, symbol, Side::Sell, static_cast<Price>(10100 + i), 100);
         book.add_order(sell);
     }
     

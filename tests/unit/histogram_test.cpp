@@ -39,7 +39,7 @@ TEST_CASE("LatencyHistogram: Percentiles", "[histogram]") {
     LatencyHistogram hist;
     
     // Record 100 values from 1 to 100
-    for (int i = 1; i <= 100; ++i) {
+    for (uint64_t i = 1; i <= 100; ++i) {
         hist.record(i);
     }
     
@@ -100,7 +100,7 @@ TEST_CASE("LatencyHistogram: Common percentiles", "[histogram]") {
     LatencyHistogram hist;
     
     // Record latencies in microseconds (1000-10000 ns)
-    for (int i = 1000; i <= 10000; i += 100) {
+    for (uint64_t i = 1000; i <= 10000; i += 100) {
         hist.record(i);
     }
     
