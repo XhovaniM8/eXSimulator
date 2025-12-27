@@ -1,34 +1,34 @@
 # Exchange Simulator Roadmap
 
-## Current Status: Phase 2 Complete ✅
+## Current Status: Phase 2 Complete
 
 **Last Updated**: December 27, 2024
 
 ### Performance Achieved
 | Metric | Result | Original Target | Status |
 |--------|--------|-----------------|--------|
-| Throughput | **3.3M orders/sec** | 10K orders/sec | ✅ 330x target |
-| p50 Latency | **32µs** | <100µs | ✅ |
-| p99 Latency | **32µs** | <1ms | ✅ |
-| Trades/sec | **8,700** | - | ✅ |
+| Throughput | **3.3M orders/sec** | 10K orders/sec | 330x target |
+| p50 Latency | **32us** | <100us | Done |
+| p99 Latency | **32us** | <1ms | Done |
+| Trades/sec | **8,700** | - | Done |
 
 ### What's Working
-- ✅ Full matching engine with price-time priority
-- ✅ All order types: Limit, Market, IOC, FOK, PostOnly
-- ✅ Self-trade prevention (basic)
-- ✅ SPSC lock-free queue for order ingestion
-- ✅ Cache-line aligned Order struct (64 bytes)
-- ✅ Multi-symbol support with sharding
-- ✅ Trading agents: MarketMaker, Momentum, Noise
-- ✅ Event journal for replay
-- ✅ Latency histograms (HDR)
-- ✅ CI/CD pipeline
+- Full matching engine with price-time priority
+- All order types: Limit, Market, IOC, FOK, PostOnly
+- Self-trade prevention (basic)
+- SPSC lock-free queue for order ingestion
+- Cache-line aligned Order struct (64 bytes)
+- Multi-symbol support with sharding
+- Trading agents: MarketMaker, Momentum, Noise
+- Event journal for replay
+- Latency histograms (HDR)
+- CI/CD pipeline
 
 ---
 
 ## Phase Overview
 
-### ✅ Phase 1: Foundation (Complete)
+### Phase 1: Foundation [Complete]
 **Duration**: 1 week (vs 2 weeks planned)
 
 - [x] Order struct with fixed-size fields
@@ -39,7 +39,7 @@
 - [x] CMake build system
 - [x] CI pipeline (GitHub Actions)
 
-### ✅ Phase 2: Matching Engine (Complete)
+### Phase 2: Matching Engine [Complete]
 **Duration**: 1 week (vs 2 weeks planned)
 
 - [x] Price-time priority (FIFO within price level)
@@ -58,11 +58,11 @@
 - Self-trade prevention uses order ID proximity as proxy for trader ID
 - `get_bids()`/`get_asks()` allocate on each call (optimize in Phase 4)
 
-### 🔧 Phase 3: Benchmarking (In Progress)
+### Phase 3: Benchmarking [In Progress]
 **Duration**: 1 week
 
 - [x] Baseline measurement: **3.3M orders/sec**
-- [x] Latency histogram: **32µs p50/p99**
+- [x] Latency histogram: **32us p50/p99**
 - [ ] Google Benchmark integration (CI)
 - [ ] Profiling with perf/flamegraph
 - [ ] Identify hotspots for Phase 4
@@ -80,9 +80,9 @@ make -j$(nproc)
 ./benchmarks
 ```
 
-### ⏳ Phase 4: Data Structure Optimization
+### Phase 4: Data Structure Optimization [Pending]
 **Duration**: 2 weeks
-**Target**: 5M+ orders/sec, <20µs p50
+**Target**: 5M+ orders/sec, <20us p50
 
 - [ ] Replace `std::unordered_map` with flat hashmap for price levels
 - [ ] Intrusive linked list for order queue (avoid allocations)
@@ -90,9 +90,9 @@ make -j$(nproc)
 - [ ] Batch order processing
 - [ ] Profile cache misses with `perf stat`
 
-### ⏳ Phase 5: Memory & Cache Optimization
+### Phase 5: Memory & Cache Optimization [Pending]
 **Duration**: 1-2 weeks
-**Target**: 10M+ orders/sec, <10µs p50
+**Target**: 10M+ orders/sec, <10us p50
 
 - [ ] Memory pool (pre-allocated order storage)
 - [ ] Hot/cold data separation in Order struct
@@ -100,17 +100,17 @@ make -j$(nproc)
 - [ ] Branch prediction hints (`[[likely]]`/`[[unlikely]]`)
 - [ ] Measure cache hit rates
 
-### ⏳ Phase 6: Lock-Free & Concurrency
+### Phase 6: Lock-Free & Concurrency [Pending]
 **Duration**: 1-2 weeks
 **Target**: Maintain throughput under contention
 
-- [ ] SPSC queue already implemented ✅
+- [x] SPSC queue already implemented
 - [ ] Symbol sharding across threads
 - [ ] Lock-free order ID generation
 - [ ] Thread pinning for latency stability
 - [ ] NUMA-aware allocation (if applicable)
 
-### ⏳ Phase 7: Trading Agents
+### Phase 7: Trading Agents [Pending]
 **Duration**: 1 week
 
 - [x] MarketMaker (two-sided quotes)
@@ -120,7 +120,7 @@ make -j$(nproc)
 - [ ] Realistic PnL tracking
 - [ ] Position/risk limits per agent
 
-### ⏳ Phase 8: Replay & Backtesting
+### Phase 8: Replay & Backtesting [Pending]
 **Duration**: 1 week
 
 - [x] Event journal (binary log)
@@ -129,7 +129,7 @@ make -j$(nproc)
 - [ ] Backtesting mode with fill simulation
 - [ ] Replay from historical data files
 
-### ⏳ Phase 9: Dashboard & API
+### Phase 9: Dashboard & API [Pending]
 **Duration**: 2-3 weeks
 
 - [ ] WebSocket market data publisher
@@ -140,7 +140,7 @@ make -j$(nproc)
   - [ ] Latency charts
   - [ ] Agent controls
 
-### ⏳ Phase 10: Polish & Documentation
+### Phase 10: Polish & Documentation [Pending]
 **Duration**: 1 week
 
 - [ ] Code cleanup and documentation
@@ -155,16 +155,16 @@ make -j$(nproc)
 
 | Phase | Planned | Actual | Status |
 |-------|---------|--------|--------|
-| 1. Foundation | 2 weeks | 1 week | ✅ Complete |
-| 2. Matching Engine | 2 weeks | 1 week | ✅ Complete |
-| 3. Benchmarking | 1 week | - | 🔧 In Progress |
-| 4. Data Structures | 2 weeks | - | ⏳ |
-| 5. Memory & Cache | 2 weeks | - | ⏳ |
-| 6. Lock-Free | 2 weeks | - | ⏳ |
-| 7. Agents | 1 week | - | ⏳ |
-| 8. Replay | 1 week | - | ⏳ |
-| 9. Dashboard | 3 weeks | - | ⏳ |
-| 10. Polish | 1 week | - | ⏳ |
+| 1. Foundation | 2 weeks | 1 week | Complete |
+| 2. Matching Engine | 2 weeks | 1 week | Complete |
+| 3. Benchmarking | 1 week | - | In Progress |
+| 4. Data Structures | 2 weeks | - | Pending |
+| 5. Memory & Cache | 2 weeks | - | Pending |
+| 6. Lock-Free | 2 weeks | - | Pending |
+| 7. Agents | 1 week | - | Pending |
+| 8. Replay | 1 week | - | Pending |
+| 9. Dashboard | 3 weeks | - | Pending |
+| 10. Polish | 1 week | - | Pending |
 
 **Original Estimate**: 20+ weeks  
 **Revised Estimate**: ~13 weeks (3 months)  
@@ -176,12 +176,12 @@ make -j$(nproc)
 
 | Phase | Throughput | p50 Latency | p99 Latency |
 |-------|------------|-------------|-------------|
-| 2 (Baseline) | 10K/sec | <100µs | <1ms |
-| **2 (Actual)** | **3.3M/sec** | **32µs** | **32µs** |
-| 3 (Measured) | 3M+/sec | <50µs | <100µs |
-| 4 (Optimized) | 5M+/sec | <20µs | <50µs |
-| 5 (Cache) | 10M+/sec | <10µs | <20µs |
-| 6 (Final) | 10M+/sec | <5µs | <10µs |
+| 2 (Baseline) | 10K/sec | <100us | <1ms |
+| **2 (Actual)** | **3.3M/sec** | **32us** | **32us** |
+| 3 (Measured) | 3M+/sec | <50us | <100us |
+| 4 (Optimized) | 5M+/sec | <20us | <50us |
+| 5 (Cache) | 10M+/sec | <10us | <20us |
+| 6 (Final) | 10M+/sec | <5us | <10us |
 
 ---
 
@@ -237,7 +237,7 @@ perf script | flamegraph.pl > flame.svg
 ```
 
 ### Why is p50 = p99?
-The histogram buckets are coarse at low latencies. Most operations complete in the same bucket (~32µs). As we optimize, we'll see more spread. This is actually a good sign - consistent latency.
+The histogram buckets are coarse at low latencies. Most operations complete in the same bucket (~32us). As we optimize, we'll see more spread. This is actually a good sign - consistent latency.
 
 ---
 
