@@ -1,29 +1,26 @@
 #pragma once
-
 #include <algorithm>
 #include <cstddef>
 #include "core/types.hpp"
-
 namespace exchange {
-
 // Order struct optimized for cache efficiency
 // Layout designed to minimize padding and fit common fields in first cache line
-// Total size: 48 bytes (fits in single cache line with room to spare)
+// Total size: 64 bytes (fits in single cache line)
 struct alignas(64) Order {
     // Hot fields (frequently accessed during matching) - first 32 bytes
-    OrderId id;              // 8 bytes
-    Price price;             // 8 bytes  
-    Quantity quantity;       // 4 bytes
-    Quantity filled_qty;     // 4 bytes
-    Side side;               // 1 byte
-    OrderType type;          // 1 byte
-    TimeInForce tif;         // 1 byte
-    OrderStatus status;      // 1 byte
-    uint32_t _pad1;          // 4 bytes padding
+    OrderId id = 0;              // 8 bytes
+    Price price = 0;             // 8 bytes  
+    Quantity quantity = 0;       // 4 bytes
+    Quantity filled_qty = 0;     // 4 bytes
+    Side side = Side::Buy;       // 1 byte
+    OrderType type = OrderType::Limit;    // 1 byte
+    TimeInForce tif = TimeInForce::Day;   // 1 byte
+    OrderStatus status = OrderStatus::New; // 1 byte
+    uint32_t _pad1 = 0;          // 4 bytes padding
     
     // Cold fields (accessed less frequently)
-    Symbol symbol;           // 8 bytes
-    Timestamp timestamp;     // 8 bytes
+    Symbol symbol{};             // 8 bytes
+    Timestamp timestamp = 0;     // 8 bytes
     
     // Constructor
     Order() = default;
@@ -93,10 +90,8 @@ struct alignas(64) Order {
         }
     }
 };
-
 // Compile-time layout verification
 static_assert(sizeof(Order) == 64, "Order should be 64 bytes (one cache line)");
 static_assert(alignof(Order) == 64, "Order should be cache-line aligned");
 static_assert(offsetof(Order, price) == 8, "Price should be at offset 8");
-
 }  // namespace exchange
