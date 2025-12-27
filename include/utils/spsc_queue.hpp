@@ -24,7 +24,7 @@ class SPSCQueue {
     static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
     
 public:
-    SPSCQueue() : head_(0), tail_(0), cached_head_(0), cached_tail_(0) {
+    SPSCQueue() : head_(0), cached_tail_(0), tail_(0), cached_head_(0) {
         // Touch all pages to avoid page faults on hot path
         for (size_t i = 0; i < Capacity; ++i) {
             new (&slots_[i]) T{};
@@ -126,7 +126,9 @@ private:
     alignas(CACHE_LINE_SIZE) T slots_[Capacity];
 };
 
-// Multi-Producer Single-Consumer queue (optional, more complex)
-// TODO: Implement if needed for multiple order sources
+// Multi-Producer Single-Consumer queue
+// Not currently implemented - SPSC is sufficient for single order source
+// Would be needed if multiple threads submit orders simultaneously
+// Implementation would require atomic operations on head for producer contention
 
 }  // namespace exchange

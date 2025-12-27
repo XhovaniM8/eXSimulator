@@ -20,7 +20,7 @@ using BBOCallback = std::function<void(const BBOUpdate&)>;
 struct OrderBookConfig {
     size_t max_price_levels = 10000;    // Max distinct price levels per side
     size_t max_orders_per_level = 1000; // Max orders at single price
-    bool enable_self_trade_prevention = true;
+    bool enable_self_trade_prevention = false;
     bool enable_post_only_rejection = true;
 };
 
@@ -98,6 +98,9 @@ private:
     
     // Emit BBO update if changed
     void maybe_emit_bbo();
+    
+    // Emit execution report
+    void emit_execution_report(const Order& order, Quantity filled, Price avg_price);
     
     Symbol symbol_;
     OrderBookConfig config_;

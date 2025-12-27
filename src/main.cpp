@@ -81,7 +81,7 @@ int main(int argc, char** argv) {
     printf("Adding %zu symbols...\n", config.num_symbols);
     std::vector<Symbol> symbols;
     for (size_t i = 0; i < config.num_symbols; ++i) {
-        char name[8];
+        char name[9];  // 8 + 1 for null terminator
         snprintf(name, sizeof(name), "SYM%04zu", i);
         Symbol sym(name);
         engine.add_symbol(sym);
@@ -152,9 +152,9 @@ int main(int argc, char** argv) {
         
         // Progress report
         if (config.verbose && (tick + 1) % 10000 == 0) {
-            printf("  Tick %zu/%zu (%.1f%%)\n", 
+            printf("  Tick %zu/%zu (%.1f%%)\\n", 
                    tick + 1, config.num_ticks,
-                   100.0 * (tick + 1) / config.num_ticks);
+                   100.0 * static_cast<double>(tick + 1) / static_cast<double>(config.num_ticks));
         }
     }
     
@@ -166,12 +166,12 @@ int main(int argc, char** argv) {
     printf("\nResults\n");
     printf("-------\n");
     printf("Duration:     %ld ms\n", duration_ms);
-    printf("Ticks/sec:    %.0f\n", 1000.0 * config.num_ticks / duration_ms);
+    printf("Ticks/sec:    %.0f\n", 1000.0 * static_cast<double>(config.num_ticks) / static_cast<double>(duration_ms));
     printf("Trades:       %lu\n", trade_count);
     printf("Volume:       %lu\n", total_volume);
     printf("Orders:       %lu\n", engine.stats().orders_received);
     printf("Orders/sec:   %.0f\n", 
-           1000.0 * engine.stats().orders_received / duration_ms);
+           1000.0 * static_cast<double>(engine.stats().orders_received) / static_cast<double>(duration_ms));
     
     printf("\nTick Latency (ns)\n");
     printf("-----------------\n");

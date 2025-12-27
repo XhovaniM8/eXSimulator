@@ -90,6 +90,13 @@ target_link_libraries(exchange_sim PRIVATE
     exchange_utils
 )
 
+# Feature test executable
+add_executable(feature_test src/feature_test.cpp)
+target_link_libraries(feature_test PRIVATE
+    exchange_engine
+    exchange_utils
+)
+
 # Benchmarks
 option(BUILD_BENCHMARKS "Build benchmark suite" ON)
 if(BUILD_BENCHMARKS)
@@ -138,6 +145,16 @@ endif()
 # Install
 install(TARGETS exchange_sim RUNTIME DESTINATION bin)
 install(DIRECTORY include/ DESTINATION include)
+
+# Unit tests
+add_executable(test_order_book
+    tests/test_order_book.cpp
+)
+target_link_libraries(test_order_book PRIVATE 
+    exchange_engine 
+    exchange_core
+    exchange_utils
+)
 
 # Output directories
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)

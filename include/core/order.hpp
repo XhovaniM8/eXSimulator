@@ -1,5 +1,7 @@
 #pragma once
 
+#include <algorithm>
+#include <cstddef>
 #include "core/types.hpp"
 
 namespace exchange {

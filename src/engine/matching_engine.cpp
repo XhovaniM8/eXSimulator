@@ -88,15 +88,15 @@ OrderResult MatchingEngine::replace_order(const Symbol& symbol, OrderId order_id
 bool MatchingEngine::enqueue_order(Order order) {
     InboundMessage msg;
     msg.type = MessageType::NewOrder;
-    msg.new_order.order = order;
+    msg.order = order;
     return inbound_queue_->try_push(msg);
 }
 
 bool MatchingEngine::enqueue_cancel(const Symbol& symbol, OrderId order_id) {
     InboundMessage msg;
     msg.type = MessageType::CancelOrder;
-    msg.cancel.order_id = order_id;
-    msg.cancel.symbol = symbol;
+    msg.order_id = order_id;
+    msg.symbol = symbol;
     return inbound_queue_->try_push(msg);
 }
 
@@ -104,10 +104,10 @@ bool MatchingEngine::enqueue_replace(const Symbol& symbol, OrderId order_id,
                                     Price new_price, Quantity new_qty) {
     InboundMessage msg;
     msg.type = MessageType::ReplaceOrder;
-    msg.replace.order_id = order_id;
-    msg.replace.symbol = symbol;
-    msg.replace.new_price = new_price;
-    msg.replace.new_qty = new_qty;
+    msg.order_id = order_id;
+    msg.symbol = symbol;
+    msg.new_price = new_price;
+    msg.new_qty = new_qty;
     return inbound_queue_->try_push(msg);
 }
 
@@ -129,14 +129,14 @@ bool MatchingEngine::process_one() {
     
     switch (msg.type) {
         case MessageType::NewOrder:
-            submit_order(msg.new_order.order);
+            submit_order(msg.order);
             break;
         case MessageType::CancelOrder:
-            cancel_order(msg.cancel.symbol, msg.cancel.order_id);
+            cancel_order(msg.symbol, msg.order_id);
             break;
         case MessageType::ReplaceOrder:
-            replace_order(msg.replace.symbol, msg.replace.order_id,
-                         msg.replace.new_price, msg.replace.new_qty);
+            replace_order(msg.symbol, msg.order_id,
+                         msg.new_price, msg.new_qty);
             break;
     }
     
@@ -195,13 +195,13 @@ EngineRunner::~EngineRunner() {
 
 void EngineRunner::start() {
     running_ = true;
-    // TODO: Start thread
+    // Threading not implemented yet - users should call engine.process_one() directly
 }
 
 void EngineRunner::stop() {
     running_ = false;
     engine_.stop();
-    // TODO: Join thread
+    // Threading not implemented yet - no thread to join
 }
 
 bool EngineRunner::is_running() const {

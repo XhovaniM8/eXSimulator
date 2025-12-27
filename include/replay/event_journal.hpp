@@ -26,12 +26,12 @@ struct JournalHeader {
     uint64_t sequence;       // Monotonic sequence number
     uint64_t timestamp;      // Nanoseconds since epoch
     EventType event_type;
-    uint8_t reserved[3];
+    uint8_t reserved[7];     // Changed from 3 to 7 for proper alignment
     uint32_t payload_size;   // Size of following payload
     uint32_t checksum;       // CRC32 of payload
 };
 
-static_assert(sizeof(JournalHeader) == 24, "Header should be 24 bytes");
+static_assert(sizeof(JournalHeader) == 32, "Header should be 32 bytes");
 
 // Serialized order for journal
 struct JournalOrder {
@@ -91,12 +91,13 @@ public:
     void close();
     
 private:
-    void write_header(EventType type, uint32_t payload_size);
+    void write_header(EventType type, uint32_t payload_size, uint32_t checksum);
     uint32_t compute_checksum(const void* data, size_t size);
     
     std::string path_;
     std::ofstream file_;
     uint64_t sequence_;
+    size_t file_size_;
     std::vector<uint8_t> buffer_;  // Write buffer
 };
 
@@ -129,6 +130,7 @@ private:
     std::string path_;
     std::ifstream file_;
     JournalHeader last_header_;
+    std::vector<uint8_t> last_payload_;
     bool last_valid_;
 };
 
