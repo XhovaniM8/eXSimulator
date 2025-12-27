@@ -81,8 +81,8 @@ int main(int argc, char** argv) {
     printf("Adding %zu symbols...\n", config.num_symbols);
     std::vector<Symbol> symbols;
     for (size_t i = 0; i < config.num_symbols; ++i) {
-        char name[9];  // 8 + 1 for null terminator
-        snprintf(name, sizeof(name), "SYM%04zu", i);
+        char name[32];  // 8 + 1 for null terminator
+        snprintf(name, sizeof(name), "SYM%04d", static_cast<int>(i));
         Symbol sym(name);
         engine.add_symbol(sym);
         symbols.push_back(sym);

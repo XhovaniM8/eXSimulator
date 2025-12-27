@@ -22,7 +22,7 @@ add_compile_options(
     -Wno-unused-parameter
     -Wconversion -Wsign-conversion
     -Wshadow -Wdouble-promotion
-    -fno-exceptions  # HFT style: no exceptions on hot path
+      # HFT style: no exceptions on hot path
     -fno-rtti        # HFT style: no RTTI overhead
 )
 

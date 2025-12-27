@@ -9,6 +9,9 @@
 
 #include "core/order.hpp"
 #include "core/trade.hpp"
+#include <functional>
+#include <functional>
+#include <functional>
 
 namespace exchange {
 

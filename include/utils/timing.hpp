@@ -21,7 +21,7 @@ public:
 #else
         // Fallback for non-x86
         auto now = std::chrono::high_resolution_clock::now();
-        return now.time_since_epoch().count();
+        return static_cast<uint64_t>(now.time_since_epoch().count());
 #endif
     }
     
