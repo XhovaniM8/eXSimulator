@@ -5,8 +5,6 @@
 // the library compiles and can be linked.
 //
 
-#include "utils/spsc_queue.hpp"
-
 namespace exchange {
 
 // Template instantiation is implicit when headers are included.
