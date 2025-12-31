@@ -14,6 +14,15 @@ OrderBook::OrderBook(Symbol symbol, const OrderBookConfig& config)
     , last_bbo_bid_(0)
     , last_bbo_ask_(INVALID_PRICE)
 {
+    // Reserve hash map capacity to avoid rehashing in hot path
+    orders_.reserve(10000);
+    bid_levels_.reserve(1000);
+    ask_levels_.reserve(1000);
+    
+    // Reserve trade buffer for batching
+    if (config_.batch_callbacks) {
+        pending_trades_.reserve(config_.trade_batch_size);
+    }
 }
 
 OrderBook::~OrderBook() = default;
@@ -22,19 +31,20 @@ OrderResult OrderBook::add_order(Order order) {
     OrderResult result{};
     result.order_id = order.id;
     
-    if (order.quantity == 0) {
+    // Fast path validations with branch prediction hints
+    if (order.quantity == 0) [[unlikely]] {
         result.success = false;
         result.reject_reason = RejectReason::InvalidQuantity;
         return result;
     }
     
-    if (order.type == OrderType::Limit && order.price <= 0) {
+    if (order.type == OrderType::Limit && order.price <= 0) [[unlikely]] {
         result.success = false;
         result.reject_reason = RejectReason::InvalidPrice;
         return result;
     }
     
-    if (order.type == OrderType::Market) {
+    if (order.type == OrderType::Market) [[unlikely]] {
         if (order.side == Side::Buy) {
             order.price = INVALID_PRICE;
         } else {
@@ -42,14 +52,14 @@ OrderResult OrderBook::add_order(Order order) {
         }
     }
     
-    if (orders_.count(order.id)) {
+    if (orders_.count(order.id)) [[unlikely]] {
         result.success = false;
         result.reject_reason = RejectReason::DuplicateOrderId;
         return result;
     }
     
     // post-only can't cross
-    if (order.type == OrderType::PostOnly && config_.enable_post_only_rejection) {
+    if (order.type == OrderType::PostOnly && config_.enable_post_only_rejection) [[unlikely]] {
         bool would_cross = false;
         if (order.side == Side::Buy && best_ask_ != INVALID_PRICE && order.price >= best_ask_) {
             would_cross = true;
@@ -64,7 +74,7 @@ OrderResult OrderBook::add_order(Order order) {
         }
     }
     
-    if (order.tif == TimeInForce::FillOrKill || order.type == OrderType::FillOrKill) {
+    if (order.tif == TimeInForce::FillOrKill || order.type == OrderType::FillOrKill) [[unlikely]] {
         Quantity available = 0;
         auto& opposite_levels = (order.side == Side::Buy) ? ask_levels_ : bid_levels_;
         
@@ -82,32 +92,40 @@ OrderResult OrderBook::add_order(Order order) {
         }
     }
     
+    // Main matching logic - hot path
     match_order(order);
     
     result.filled_qty = order.filled_qty;
     result.avg_fill_price = order.filled_qty > 0 ? 
         (order.price * order.filled_qty) / order.filled_qty : 0;
     
+    // Handle time-in-force logic
     if (order.tif == TimeInForce::ImmediateOrCancel || 
-        order.type == OrderType::ImmediateOrCancel) {
+        order.type == OrderType::ImmediateOrCancel) [[unlikely]] {
         if (!order.is_filled()) {
             emit_execution_report(order, order.filled_qty, result.avg_fill_price);
         }
     } else if (order.tif == TimeInForce::FillOrKill || 
-               order.type == OrderType::FillOrKill) {
+               order.type == OrderType::FillOrKill) [[unlikely]] {
         if (!order.is_filled()) {
             result.success = false;
             result.reject_reason = RejectReason::InvalidQuantity;
             result.filled_qty = 0;
             return result;
         }
-    } else if (!order.is_filled() && order.type == OrderType::Limit) {
+    } else if (!order.is_filled() && order.type == OrderType::Limit) [[likely]] {
         insert_resting_order(order);
-    } else if (!order.is_filled() && order.type == OrderType::PostOnly) {
+    } else if (!order.is_filled() && order.type == OrderType::PostOnly) [[unlikely]] {
         insert_resting_order(order);
     }
-    if (order.filled_qty > 0) {
+    
+    if (order.filled_qty > 0) [[likely]] {
         emit_execution_report(order, order.filled_qty, result.avg_fill_price);
+    }
+    
+    // Flush any pending trades
+    if (config_.batch_callbacks) [[likely]] {
+        flush_trades();
     }
     
     result.success = true;
@@ -213,37 +231,43 @@ void OrderBook::match_order(Order& order) {
         
         PriceLevel& level = level_it->second;
         
-        while (!order.is_filled() && !level.empty()) {
-            OrderId resting_id = level.front_order_id();
+        // Hot path: match against resting orders at this price
+        while (!order.is_filled() && !level.empty()) [[likely]] {
+            const OrderId resting_id = level.front_order_id();
             
             auto resting_it = orders_.find(resting_id);
-            if (resting_it == orders_.end()) {
+            if (resting_it == orders_.end()) [[unlikely]] {
                 level.pop_front();
                 continue;
             }
             
             Order& resting = resting_it->second;
             
-            if (config_.enable_self_trade_prevention) {
+            // Self-trade prevention check
+            if (config_.enable_self_trade_prevention) [[unlikely]] {
                 if (std::abs(static_cast<int64_t>(order.id - resting.id)) < 100) {
                     stopped_for_self_trade = true;
                     break;
                 }
             }
             
-            Quantity fill_qty = std::min(order.remaining(), resting.remaining());
+            // Calculate fill quantity
+            const Quantity fill_qty = std::min(order.remaining(), resting.remaining());
             
+            // Update orders
             order.fill(fill_qty);
             resting.fill(fill_qty);
             level.fill_front(fill_qty);
             
+            // Emit trade (will be batched)
             if (order.side == Side::Buy) {
                 emit_trade(order, resting, best_opposite, fill_qty, Side::Buy);
             } else {
                 emit_trade(resting, order, best_opposite, fill_qty, Side::Sell);
             }
             
-            if (resting.is_filled()) {
+            // Remove filled resting order
+            if (resting.is_filled()) [[likely]] {
                 level.pop_front();
                 orders_.erase(resting_it);
             }
@@ -329,7 +353,24 @@ void OrderBook::emit_trade(const Order& buy, const Order& sell,
     trade.timestamp = Timing::now_ns();
     trade.aggressor_side = aggressor;
     
-    on_trade_(trade);
+    if (config_.batch_callbacks) [[likely]] {
+        pending_trades_.push_back(trade);
+        // Flush if batch is full
+        if (pending_trades_.size() >= config_.trade_batch_size) [[unlikely]] {
+            flush_trades();
+        }
+    } else {
+        on_trade_(trade);
+    }
+}
+
+void OrderBook::flush_trades() {
+    if (pending_trades_.empty() || !on_trade_) return;
+    
+    for (const auto& trade : pending_trades_) {
+        on_trade_(trade);
+    }
+    pending_trades_.clear();
 }
 
 void OrderBook::maybe_emit_bbo() {

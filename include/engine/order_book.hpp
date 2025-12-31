@@ -22,6 +22,8 @@ struct OrderBookConfig {
     size_t max_orders_per_level = 1000; // Max orders at single price
     bool enable_self_trade_prevention = false;
     bool enable_post_only_rejection = true;
+    bool batch_callbacks = true;         // Batch trades for performance
+    size_t trade_batch_size = 100;       // Flush trades after N trades
 };
 
 // Result of an order operation
@@ -75,6 +77,9 @@ public:
     void set_execution_callback(ExecutionCallback cb) { on_execution_ = std::move(cb); }
     void set_bbo_callback(BBOCallback cb) { on_bbo_ = std::move(cb); }
     
+    // Flush pending batched trades (call at end of processing batch)
+    void flush_pending() { flush_trades(); }
+    
     // Symbol getter
     const Symbol& symbol() const { return symbol_; }
     
@@ -102,6 +107,9 @@ private:
     // Emit execution report
     void emit_execution_report(const Order& order, Quantity filled, Price avg_price);
     
+    // Flush pending trades to callback
+    void flush_trades();
+    
     Symbol symbol_;
     OrderBookConfig config_;
     
@@ -109,7 +117,7 @@ private:
     std::unordered_map<OrderId, Order> orders_;
     
     // Price levels indexed by price
-    // Using unordered_map for O(1) lookup, sorted iteration done separately
+    // Pre-allocated capacity for reduced rehashing
     std::unordered_map<Price, PriceLevel> bid_levels_;
     std::unordered_map<Price, PriceLevel> ask_levels_;
     
@@ -128,6 +136,9 @@ private:
     // Last emitted BBO for change detection
     Price last_bbo_bid_;
     Price last_bbo_ask_;
+    
+    // Trade batching for performance
+    std::vector<Trade> pending_trades_;
 };
 
 }  // namespace exchange
