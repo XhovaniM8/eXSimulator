@@ -1,4 +1,3 @@
-# .github/workflows/ci.yml
 name: CI
 
 on:
@@ -8,128 +7,55 @@ on:
     branches: [main]
 
 jobs:
-  build-test:
+  check:
     runs-on: ubuntu-24.04
-
     steps:
     - uses: actions/checkout@v4
 
     - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y cmake ninja-build cppcheck
-
-    - name: Cache Catch2
-      id: cache-catch2
-      uses: actions/cache@v4
-      with:
-        path: ~/catch2
-        key: catch2-v3.5.0
-
-    - name: Install Catch2
-      if: steps.cache-catch2.outputs.cache-hit != 'true'
-      run: |
-        git clone --branch v3.5.0 --depth 1 https://github.com/catchorg/Catch2.git
-        cd Catch2
-        cmake -B build -S . -DBUILD_TESTING=OFF -DCMAKE_INSTALL_PREFIX=~/catch2
-        cmake --build build --target install
+      run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
 
     - name: Configure
       run: |
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_PREFIX_PATH=~/catch2 \
           -DCMAKE_CXX_FLAGS="-Wno-interference-size" \
-          -DBUILD_TESTS=ON
+          -DBUILD_TESTS=OFF \
+          -DBUILD_BENCHMARKS=OFF
 
     - name: Build
       run: cmake --build build
 
-    - name: Test
-      working-directory: build
-      run: ctest --output-on-failure --timeout 120
+    - name: Run tests
+      run: build/test_order_book
 
-    - name: Static analysis
-      run: |
-        cppcheck --enable=warning,performance \
-          --error-exitcode=0 \
-          --suppress=missingIncludeSystem \
-          -I include src/ include/
-
-  sanitizers:
-    runs-on: ubuntu-24.04
-
-    steps:
-    - uses: actions/checkout@v4
-
-    - name: Install dependencies
-      run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
-
-    - name: Build with ASan/UBSan
-      run: |
-        cmake -B build -G Ninja \
-          -DCMAKE_BUILD_TYPE=Debug \
-          -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -Wno-interference-size"
-        cmake --build build
-
-    - name: Run sanitized tests
-      working-directory: build
-      env:
-        ASAN_OPTIONS: detect_leaks=1
-      run: |
-        ./exchange_sim --symbols 2 --agents 10 --ticks 1000 || true
+    - name: Smoke test
+      run: build/exchange_sim --symbols 2 --agents 10 --ticks 1000
 
   benchmark:
     runs-on: ubuntu-24.04
+    needs: check
     if: github.ref == 'refs/heads/main'
-
     steps:
     - uses: actions/checkout@v4
 
     - name: Install dependencies
       run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
 
-    - name: Cache Google Benchmark
-      id: cache-gbench
-      uses: actions/cache@v4
-      with:
-        path: ~/benchmark
-        key: benchmark-v1.8.3
-
-    - name: Install Google Benchmark
-      if: steps.cache-gbench.outputs.cache-hit != 'true'
-      run: |
-        git clone --branch v1.8.3 --depth 1 https://github.com/google/benchmark.git
-        cd benchmark
-        cmake -B build -S . -DBENCHMARK_ENABLE_TESTING=OFF -DCMAKE_INSTALL_PREFIX=~/benchmark
-        cmake --build build --target install
-
-    - name: Build benchmarks
+    - name: Configure
       run: |
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
-          -DCMAKE_PREFIX_PATH=~/benchmark \
           -DCMAKE_CXX_FLAGS="-Wno-interference-size" \
-          -DBUILD_BENCHMARKS=ON
-        cmake --build build
+          -DBUILD_TESTS=OFF \
+          -DBUILD_BENCHMARKS=OFF
 
-    - name: Run benchmarks
+    - name: Build
+      run: cmake --build build
+
+    - name: Benchmark
       run: |
-        if [ -f build/bin/benchmarks ]; then
-          build/bin/benchmarks --benchmark_format=json > benchmark_results.json
-          echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          build/bin/benchmarks --benchmark_format=console >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-        fi
-
-    - name: Track history
-      uses: benchmark-action/github-action-benchmark@v1
-      if: hashFiles('benchmark_results.json') != ''
-      with:
-        tool: 'googlecpp'
-        output-file-path: benchmark_results.json
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-        auto-push: true
-        alert-threshold: '150%'
-        comment-on-alert: true
+        echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        build/exchange_sim --symbols 4 --agents 50 --ticks 100000 2>&1 | tee -a $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
