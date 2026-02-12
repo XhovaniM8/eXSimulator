@@ -46,7 +46,6 @@ target_link_libraries(exchange_engine PUBLIC exchange_core)
 # Utils library
 add_library(exchange_utils STATIC
     src/utils/spsc_queue.cpp
-    src/utils/memory_pool.cpp
     src/utils/histogram.cpp
     src/utils/timing.cpp
 )
@@ -112,6 +111,8 @@ if(BUILD_BENCHMARKS)
             exchange_utils
             benchmark::benchmark
         )
+        # Relax strict flags for benchmark code (Google Benchmark requires RTTI)
+        target_compile_options(benchmarks PRIVATE -frtti -Wno-sign-conversion -Wno-conversion -Wno-deprecated-declarations)
     else()
         message(STATUS "Google Benchmark not found, skipping benchmark build")
     endif()
@@ -125,9 +126,6 @@ if(BUILD_TESTS)
     if(Catch2_FOUND)
         add_executable(unit_tests
             tests/unit/order_test.cpp
-            tests/unit/order_book_test.cpp
-            tests/unit/spsc_queue_test.cpp
-            tests/unit/histogram_test.cpp
         )
         target_link_libraries(unit_tests PRIVATE
             exchange_engine

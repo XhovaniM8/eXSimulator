@@ -8,7 +8,6 @@
 #include "agents/agents.hpp"
 #include "core/order.hpp"
 #include "engine/matching_engine.hpp"
-#include "replay/event_journal.hpp"
 #include "utils/histogram.hpp"
 #include "utils/timing.hpp"
 
@@ -19,8 +18,6 @@ struct Config {
     size_t num_symbols = 10;
     size_t num_agents = 100;
     size_t num_ticks = 100000;
-    bool enable_journal = false;
-    std::string journal_path = "events.journal";
     bool verbose = false;
 };
 
@@ -30,7 +27,6 @@ void print_usage(const char* prog) {
     printf("  --symbols N      Number of symbols (default: 10)\n");
     printf("  --agents N       Number of agents per symbol (default: 100)\n");
     printf("  --ticks N        Number of simulation ticks (default: 100000)\n");
-    printf("  --journal PATH   Enable journaling to PATH\n");
     printf("  --verbose        Print progress\n");
     printf("  --help           Show this help\n");
 }
@@ -50,9 +46,6 @@ Config parse_args(int argc, char** argv) {
             config.num_agents = std::stoul(argv[++i]);
         } else if (arg == "--ticks" && i + 1 < argc) {
             config.num_ticks = std::stoul(argv[++i]);
-        } else if (arg == "--journal" && i + 1 < argc) {
-            config.enable_journal = true;
-            config.journal_path = argv[++i];
         } else if (arg == "--verbose") {
             config.verbose = true;
         }

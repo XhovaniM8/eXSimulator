@@ -1,8 +1,8 @@
 # Exchange Simulator Roadmap
 
-## Current Status: Phase 2 Complete
+## Current Status: Phase 3 In Progress
 
-**Last Updated**: December 27, 2024
+**Last Updated**: February 2026
 
 ### Performance Achieved
 | Metric | Result | Original Target | Status |
@@ -20,8 +20,8 @@
 - Cache-line aligned Order struct (64 bytes)
 - Multi-symbol support with sharding
 - Trading agents: MarketMaker, Momentum, Noise
-- Event journal for replay
 - Latency histograms (HDR)
+- Google Benchmark micro-benchmarks
 - CI/CD pipeline
 
 ---
@@ -63,19 +63,16 @@
 
 - [x] Baseline measurement: **3.3M orders/sec**
 - [x] Latency histogram: **32us p50/p99**
-- [ ] Google Benchmark integration (CI)
+- [x] Google Benchmark integration (order book, matching engine, queue benchmarks)
+- [ ] Google Benchmark in CI
 - [ ] Profiling with perf/flamegraph
 - [ ] Identify hotspots for Phase 4
 - [ ] Document baseline in performance report
 
-**Next Steps**:
+**Run benchmarks**:
 ```bash
-# Install Google Benchmark
-sudo apt install libbenchmark-dev
-
-# Run benchmarks
 cd build
-cmake -DBUILD_BENCHMARKS=ON ..
+cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_BENCHMARKS=ON ..
 make -j$(nproc)
 ./benchmarks
 ```
@@ -94,7 +91,6 @@ make -j$(nproc)
 **Duration**: 1-2 weeks
 **Target**: 10M+ orders/sec, <10us p50
 
-- [ ] Memory pool (pre-allocated order storage)
 - [ ] Hot/cold data separation in Order struct
 - [ ] Prefetch hints for likely code paths
 - [ ] Branch prediction hints (`[[likely]]`/`[[unlikely]]`)
@@ -123,7 +119,7 @@ make -j$(nproc)
 ### Phase 8: Replay & Backtesting [Pending]
 **Duration**: 1 week
 
-- [x] Event journal (binary log)
+- [x] Event journal (binary log skeleton)
 - [x] Replay harness skeleton
 - [ ] Deterministic replay (byte-for-byte)
 - [ ] Backtesting mode with fill simulation
@@ -166,10 +162,6 @@ make -j$(nproc)
 | 9. Dashboard | 3 weeks | - | Pending |
 | 10. Polish | 1 week | - | Pending |
 
-**Original Estimate**: 20+ weeks  
-**Revised Estimate**: ~13 weeks (3 months)  
-**Current Progress**: Week 3
-
 ---
 
 ## Performance Targets by Phase
@@ -185,56 +177,10 @@ make -j$(nproc)
 
 ---
 
-## Interview Talking Points
-
-### What we built
-> "A matching engine that processes 3.3 million orders per second on commodity ARM hardware, with 32 microsecond median latency."
-
-### Key optimizations
-1. **Cache-line aligned Order struct** (64 bytes) - hot fields first
-2. **Lock-free SPSC queue** for order ingestion - no mutex contention
-3. **Price-time priority** with O(1) best bid/ask lookup
-4. **Pre-allocated buffers** to avoid allocation on hot path
-
-### Bottlenecks found
-1. `std::unordered_map` for price levels - hash collisions at scale
-2. Sign conversion warnings causing -Werror failures
-3. Self-include in header causing infinite recursion
-
-### What's next
-1. Flat hashmap for price levels (robin hood hashing)
-2. Memory pool for Order objects
-3. Intrusive linked lists to eliminate pointer chasing
-4. Symbol sharding across CPU cores
-
-### Tradeoffs made
-- **FIFO over pro-rata**: Simpler, matches most equity exchanges
-- **Fixed-size Symbol**: 8 bytes, avoids string allocation
-- **No exceptions on hot path**: `-fno-exceptions` for benchmarks
-- **Single-threaded matching**: Correct first, parallel later
-
----
-
 ## FAQ
 
 ### Why not start with lock-free queues?
 Lock-free code is hard to debug. Get correctness first, then optimize. We implemented SPSC queue in Phase 2 because it was straightforward and high-impact.
-
-### What if I can't hit the targets?
-The learning matters more than the numbers. Being able to explain *why* you're at 100K orders/sec and *what* you'd do to reach 10M is more impressive than cargo-culting optimizations you don't understand.
-
-### How do I measure accurately?
-```bash
-# CPU cycles (most accurate)
-perf stat -e cycles,instructions,cache-misses ./exchange_sim
-
-# Flamegraph for hotspots
-perf record -g ./exchange_sim --ticks 100000
-perf script | flamegraph.pl > flame.svg
-
-# Google Benchmark for micro-benchmarks
-./benchmarks --benchmark_format=json > results.json
-```
 
 ### Why is p50 = p99?
 The histogram buckets are coarse at low latencies. Most operations complete in the same bucket (~32us). As we optimize, we'll see more spread. This is actually a good sign - consistent latency.

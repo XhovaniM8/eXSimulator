@@ -34,21 +34,25 @@ make -j$(nproc)
 cmake -DCMAKE_BUILD_TYPE=Debug ..
 ```
 
-### With Tests
+### With Benchmarks
 ```bash
-cmake -DBUILD_TESTS=ON ..
+cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_BENCHMARKS=ON ..
+make -j$(nproc)
 ```
+
+Requires [Google Benchmark](https://github.com/google/benchmark): `sudo apt install libbenchmark-dev`
 
 ## Testing
 
 ```bash
-./bin/unit_tests
-```
+# Feature tests
+./feature_test
 
-## Benchmarking
+# Order book tests
+./test_order_book
 
-```bash
-./scripts/benchmark.sh
+# Benchmarks
+./benchmarks
 ```
 
 ## Code Review Checklist

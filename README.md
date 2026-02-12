@@ -14,8 +14,8 @@ Phase 2 complete, Phase 3 (benchmarking) in progress. See [ROADMAP.md](ROADMAP.m
 - Lock-free SPSC queue for order ingestion
 - Multi-symbol support with sharding
 - Trading agents: MarketMaker, Momentum, Noise
-- Event journal for replay
 - Latency histograms
+- Google Benchmark micro-benchmarks
 
 **Performance (current):**
 | Metric | Result |
@@ -28,12 +28,7 @@ Phase 2 complete, Phase 3 (benchmarking) in progress. See [ROADMAP.md](ROADMAP.m
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                         Gateway Layer                           │
-│                  (FIX/Binary protocol - planned)                │
-└─────────────────────────────────────────────────────────────────┘
-                                 │
-              ┌──────────────────┼──────────────────┐
+              ┌──────────────────┬──────────────────┐
               ▼                  ▼                  ▼
      ┌──────────────┐   ┌──────────────┐   ┌──────────────┐
      │  OrderBook   │   │  OrderBook   │   │  OrderBook   │
@@ -42,10 +37,7 @@ Phase 2 complete, Phase 3 (benchmarking) in progress. See [ROADMAP.md](ROADMAP.m
               │                  │                  │
               └──────────────────┼──────────────────┘
                                  ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                        Event Journal                            │
-│                    (append-only binary log)                     │
-└─────────────────────────────────────────────────────────────────┘
+                        Matching Engine
 ```
 
 ## Build
@@ -56,6 +48,15 @@ cmake -DCMAKE_BUILD_TYPE=Release ..
 make -j$(nproc)
 ```
 
+### With Benchmarks
+
+```bash
+cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_BENCHMARKS=ON ..
+make -j$(nproc)
+```
+
+Requires [Google Benchmark](https://github.com/google/benchmark): `sudo apt install libbenchmark-dev`
+
 ## Run
 
 ```bash
@@ -65,8 +66,11 @@ make -j$(nproc)
 # Feature tests
 ./feature_test
 
-# Unit tests
+# Order book tests
 ./test_order_book
+
+# Benchmarks (if built)
+./benchmarks
 ```
 
 ## Project Structure
@@ -76,12 +80,13 @@ src/
 ├── core/       # Order, Trade, Price, Quantity types
 ├── engine/     # MatchingEngine, OrderBook, PriceLevel
 ├── agents/     # MarketMaker, Momentum, Noise traders
-├── replay/     # Event journal, replay harness
-└── utils/      # SPSC queue, memory pool, timing, histograms
+├── replay/     # Event journal, replay harness (skeleton)
+└── utils/      # SPSC queue, timing, histograms
 
 tests/
 ├── unit/           # Catch2 tests
-└── benchmarks/     # Google Benchmark (in progress)
+├── benchmarks/     # Google Benchmark suite
+└── test_order_book.cpp  # Order book integration tests
 ```
 
 ## References

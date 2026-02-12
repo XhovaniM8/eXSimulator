@@ -2,47 +2,42 @@
 
 ## Overview
 
-This document describes the design of a high-performance exchange simulator with matching engine, suitable for demonstrating quant-dev skills to prop trading firms.
+This document describes the design of a high-performance exchange simulator with matching engine.
 
 ## Goals
 
-1. **Correctness under concurrency**: Lock-free data structures, deterministic replay
+1. **Correctness**: Price-time priority matching, deterministic behavior
 2. **High-performance C++**: Cache-friendly layouts, SPSC queues, zero-copy
 3. **Systems design**: Event sourcing, symbol sharding, backpressure
 4. **Measurable results**: Orders/sec, p50/p99 latency, memory footprint
-5. **Full-stack integration**: WebSocket, REST, real-time dashboard
 
 ## Architecture
 
 ### Order Flow
 
 ```
-Client Order → Gateway → Inbound Queue → Matching Engine → Outbound Events
-                                              ↓
-                                        Order Book
-                                              ↓
-                                         Journal
+Agents → Inbound Queue → Matching Engine → Trade Callbacks
+                              ↓
+                         Order Book
 ```
 
 ### Threading Model
 
 ```
-Thread 1: Gateway (network I/O)
+Thread 1: Main loop (agents + matching engine)
     ↓ SPSC Queue
-Thread 2: Matching Engine (order processing)
-    ↓ SPSC Queue
-Thread 3: Market Data Publisher
-    ↓ SPSC Queue  
-Thread 4: Journal Writer (disk I/O)
+    Matching Engine (order processing)
 ```
+
+Currently single-threaded. Multi-threaded symbol sharding is planned for Phase 6.
 
 ### Data Structures
 
 #### Order Book
-- **Bid/Ask sides**: Separate hash maps from price → PriceLevel
-- **PriceLevel**: Intrusive doubly-linked list for O(1) cancel
+- **Bid/Ask sides**: Separate hash maps from price -> PriceLevel
+- **PriceLevel**: Doubly-linked list for O(1) cancel
 - **Best price**: Cached for O(1) access
-- **Order storage**: Flat map from OrderId → Order
+- **Order storage**: Flat map from OrderId -> Order
 
 #### Price Level Queue (FIFO)
 ```cpp
@@ -68,7 +63,7 @@ struct alignas(64) Order {
     TimeInForce tif;      // 1
     OrderStatus status;   // 1
     uint32_t _pad;        // 4
-    
+
     // Cold fields
     Symbol symbol;        // 8
     Timestamp timestamp;  // 8
@@ -76,14 +71,7 @@ struct alignas(64) Order {
 };
 ```
 
-### Memory Management
-
-#### Memory Pool
-- Pre-allocated fixed-size pools for orders
-- Free-list for O(1) alloc/dealloc
-- No heap allocation on hot path
-
-#### SPSC Queue
+### SPSC Queue
 - Lock-free bounded ring buffer
 - Cache-line padded indices
 - Local index caching for reduced contention
@@ -93,10 +81,9 @@ struct alignas(64) Order {
 | Metric | Target | Notes |
 |--------|--------|-------|
 | Throughput | 1M+ orders/sec | Single symbol, single thread |
-| p50 Latency | <1µs | Order submission to ack |
-| p99 Latency | <10µs | Including worst-case matching |
+| p50 Latency | <1us | Order submission to ack |
+| p99 Latency | <10us | Including worst-case matching |
 | Memory/Order | <64 bytes | Cache-line aligned |
-| Replay Determinism | 100% | Bit-for-bit reproducible |
 
 ## Key Optimizations
 
@@ -115,28 +102,6 @@ struct alignas(64) Order {
 - `constexpr` where possible
 - `-fno-exceptions -fno-rtti` for minimal overhead
 
-### Memory
-- Pre-allocated pools
-- Custom allocators
-- Huge pages (optional)
-
-## Deterministic Replay
-
-### Event Journal Format
-```
-+-------------------+
-| JournalHeader     | 24 bytes
-+-------------------+
-| Payload           | variable
-+-------------------+
-```
-
-### Replay Guarantees
-1. Same sequence number → same output
-2. Same order IDs for generated events
-3. Same matching outcomes
-4. Verifiable via hash comparison
-
 ## Benchmarking
 
 ### Latency Measurement
@@ -145,8 +110,8 @@ struct alignas(64) Order {
 - HDR histogram for percentiles
 
 ### Metrics Collected
-- Order latency (submit → ack)
-- Match latency (order → fill)
+- Order latency (submit -> ack)
+- Match latency (order -> fill)
 - Tick latency (all agents processed)
 - Throughput (orders/sec)
 - Memory usage
@@ -155,18 +120,6 @@ struct alignas(64) Order {
 - perf + FlameGraph for CPU hotspots
 - cachegrind for cache analysis
 - perf stat for hardware counters
-
-## Future Enhancements
-
-### Phase 2
-- Multi-symbol sharding
-- NUMA-aware allocation
-- Kernel bypass (DPDK/io_uring)
-
-### Phase 3
-- FIX protocol support
-- Persistent order book
-- Distributed deployment
 
 ## References
 
