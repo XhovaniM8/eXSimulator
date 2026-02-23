@@ -31,9 +31,10 @@ include_directories(${CMAKE_SOURCE_DIR}/include)
 
 # Core library
 add_library(exchange_core STATIC
-    src/core/types.cpp
-    src/core/order.cpp
+  src/core/types.cpp
+  src/core/order.cpp
 )
+
 
 # Engine library
 add_library(exchange_engine STATIC

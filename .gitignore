@@ -33,6 +33,9 @@ dashboard/dist/
 dashboard/.env
 dashboard/.env.local
 
+# Personal
+MY_LEARNING_PLAN.md
+
 # OS
 .DS_Store
 Thumbs.db
