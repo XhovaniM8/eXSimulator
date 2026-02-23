@@ -5,6 +5,7 @@
 //
 
 #include <benchmark/benchmark.h>
+#include <memory>
 #include <random>
 
 #include "engine/order_book.hpp"

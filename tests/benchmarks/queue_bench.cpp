@@ -157,7 +157,7 @@ static void BM_SPSCQueue_PayloadSize(benchmark::State& state) {
     }
     
     state.SetItemsProcessed(state.iterations());
-    state.SetBytesProcessed(state.iterations() * PayloadSize);
+    state.SetBytesProcessed(static_cast<int64_t>(state.iterations()) * static_cast<int64_t>(PayloadSize));
 }
 
 BENCHMARK_TEMPLATE(BM_SPSCQueue_PayloadSize, 8)->Unit(benchmark::kNanosecond);
@@ -165,4 +165,4 @@ BENCHMARK_TEMPLATE(BM_SPSCQueue_PayloadSize, 64)->Unit(benchmark::kNanosecond);
 BENCHMARK_TEMPLATE(BM_SPSCQueue_PayloadSize, 128)->Unit(benchmark::kNanosecond);
 BENCHMARK_TEMPLATE(BM_SPSCQueue_PayloadSize, 256)->Unit(benchmark::kNanosecond);
 
-BENCHMARK_MAIN();
+// BENCHMARK_MAIN() is in order_book_bench.cpp

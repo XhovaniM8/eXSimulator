@@ -138,8 +138,7 @@ BENCHMARK_DEFINE_F(MatchingEngineFixture, BatchEnqueueThenProcess)(benchmark::St
         }
         
         // Process all
-        engine_->start();
-        while (engine_->process_one()) {}
+        engine_->process_queue();
     }
 
     state.SetItemsProcessed(state.iterations() * batch_size);
@@ -272,10 +271,11 @@ BENCHMARK_DEFINE_F(MatchingEngineFixture, GetStats)(benchmark::State& state) {
     }
 
     for (auto _ : state) {
-        benchmark::DoNotOptimize(engine_->stats());
+        auto s = engine_->stats();
+        benchmark::DoNotOptimize(s);
     }
 }
 BENCHMARK_REGISTER_F(MatchingEngineFixture, GetStats)
     ->Unit(benchmark::kNanosecond);
 
-BENCHMARK_MAIN();
+// BENCHMARK_MAIN() is in order_book_bench.cpp
