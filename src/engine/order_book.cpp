@@ -1,5 +1,6 @@
 #include "engine/order_book.hpp"
 
+#include "core/types.hpp"
 #include "utils/timing.hpp"
 #include <algorithm>
 
@@ -60,7 +61,7 @@ OrderResult OrderBook::add_order(Order order) {
     if (order.side == Side::Buy && best_ask_ != INVALID_PRICE &&
         order.price >= best_ask_) {
       would_cross = true;
-    } else if (order.side == Side::Sell && best_bid_ != 0 &&
+    } else if (order.side == Side::Sell && best_bid_ != INVALID_PRICE &&
                order.price <= best_bid_) {
       would_cross = true;
     }
@@ -303,7 +304,7 @@ void OrderBook::insert_resting_order(Order order) {
 
   // Update best price
   if (order.side == Side::Buy) {
-    if (order.price > best_bid_) {
+    if (best_bid_ == INVALID_PRICE || order.price > best_bid_) {
       best_bid_ = order.price;
     }
   } else {
@@ -329,9 +330,9 @@ void OrderBook::remove_order_from_level(OrderId order_id, Side side,
 }
 
 void OrderBook::update_best_bid() {
-  best_bid_ = 0;
+  best_bid_ = INVALID_PRICE;
   for (const auto &[price, level] : bid_levels_) {
-    if (!level.empty() && price > best_bid_) {
+    if (!level.empty() && (best_bid_ == INVALID_PRICE || price > best_bid_)) {
       best_bid_ = price;
     }
   }
@@ -416,14 +417,14 @@ Quantity OrderBook::ask_quantity_at(Price price) const {
 }
 
 Price OrderBook::spread() const {
-  if (best_ask_ == INVALID_PRICE || best_bid_ == 0) {
+  if (best_ask_ == INVALID_PRICE || best_bid_ == INVALID_PRICE) {
     return INVALID_PRICE;
   }
   return best_ask_ - best_bid_;
 }
 
 Price OrderBook::mid_price() const {
-  if (best_ask_ == INVALID_PRICE || best_bid_ == 0) {
+  if (best_ask_ == INVALID_PRICE || best_bid_ == INVALID_PRICE) {
     return 0;
   }
   return (best_bid_ + best_ask_) / 2;
