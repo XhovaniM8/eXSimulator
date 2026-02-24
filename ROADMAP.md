@@ -1,16 +1,17 @@
 # Exchange Simulator Roadmap
 
-## Current Status: Phase 3 In Progress
+## Current Status: Phase 4 Next
 
 **Last Updated**: February 2026
 
-### Performance Achieved
+### Performance Achieved (Release Build, Single Core)
 | Metric | Result | Original Target | Status |
 |--------|--------|-----------------|--------|
-| Throughput | **3.3M orders/sec** | 10K orders/sec | 330x target |
-| p50 Latency | **32us** | <100us | Done |
-| p99 Latency | **32us** | <1ms | Done |
-| Trades/sec | **8,700** | - | Done |
+| AddOrder throughput | **5.8M/s** | 10K/sec | 580x target |
+| Matching throughput (100K) | **9.7M/s** | 10K/sec | 970x target |
+| Batch processing | **6.0M/s** | - | - |
+| Cancel order | **180K/s** | - | Bottleneck |
+| SPSC queue | **610M/s** | - | Excellent |
 
 ### What's Working
 - Full matching engine with price-time priority
@@ -20,9 +21,15 @@
 - Cache-line aligned Order struct (64 bytes)
 - Multi-symbol support with sharding
 - Trading agents: MarketMaker, Momentum, Noise
-- Latency histograms (HDR)
+- Latency histograms
 - Google Benchmark micro-benchmarks
 - CI/CD pipeline
+- 37/37 unit tests passing
+
+### Known Bottleneck
+Cancel order is 30x slower than add (180K/s vs 5.8M/s) due to O(n) linear scan
+in `PriceLevel::find_node()`. Fix: replace `std::vector<OrderNode*>` with
+`std::unordered_map<OrderId, OrderNode*>` for O(1) lookup. Targeted in Phase 4.
 
 ---
 
@@ -51,22 +58,24 @@
 - [x] Cancel order
 - [x] Replace order (cancel + new)
 - [x] Self-trade prevention (order ID proximity)
-- [x] Unit tests for all order types
+- [x] Unit tests for all order types (37/37 passing)
 - [x] Feature test executable
 
-**Known Issues (P2)**:
+**Known Issues (deferred to Phase 4)**:
 - Self-trade prevention uses order ID proximity as proxy for trader ID
-- `get_bids()`/`get_asks()` allocate on each call (optimize in Phase 4)
+- `get_bids()`/`get_asks()` allocate on each call
+- Cancel is O(n) due to linear scan in PriceLevel
 
-### Phase 3: Benchmarking [In Progress]
+### Phase 3: Benchmarking [Complete]
 **Duration**: 1 week
 
-- [x] Baseline measurement: **3.3M orders/sec**
-- [x] Latency histogram: **32us p50/p99**
+- [x] Baseline measurement: **5.8M orders/sec** (AddOrder), **9.7M/s** (matching at scale)
 - [x] Google Benchmark integration (order book, matching engine, queue benchmarks)
+- [x] Release build from source (removed debug-build system library)
+- [x] CPU pinning with taskset for stable measurements
+- [x] Identified hotspot: cancel O(n) scan is 30x slower than add
 - [ ] Google Benchmark in CI
 - [ ] Profiling with perf/flamegraph
-- [ ] Identify hotspots for Phase 4
 - [ ] Document baseline in performance report
 
 **Run benchmarks**:
@@ -74,33 +83,34 @@
 cd build
 cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_BENCHMARKS=ON ..
 make -j$(nproc)
-./benchmarks
+taskset -c 0 ./benchmarks
 ```
 
-### Phase 4: Data Structure Optimization [Pending]
+### Phase 4: Data Structure Optimization [Next]
 **Duration**: 2 weeks
-**Target**: 5M+ orders/sec, <20us p50
+**Target**: 2M+ cancel/sec, 10M+ add/sec
 
-- [ ] Replace `std::unordered_map` with flat hashmap for price levels
-- [ ] Intrusive linked list for order queue (avoid allocations)
-- [ ] Pool allocator for Order objects
-- [ ] Batch order processing
+- [ ] Replace `std::vector<OrderNode*>` in PriceLevel with `std::unordered_map<OrderId, OrderNode*>` → O(1) cancel
+- [ ] Fix self-trade prevention to use real trader ID field
+- [ ] Replace `std::unordered_map` for price levels with flat hashmap
+- [ ] Fix `get_bids()`/`get_asks()` to avoid per-call allocation
+- [ ] Pool allocator for OrderNode objects
 - [ ] Profile cache misses with `perf stat`
 
 ### Phase 5: Memory & Cache Optimization [Pending]
 **Duration**: 1-2 weeks
-**Target**: 10M+ orders/sec, <10us p50
+**Target**: 15M+ orders/sec, <5us p50
 
 - [ ] Hot/cold data separation in Order struct
 - [ ] Prefetch hints for likely code paths
-- [ ] Branch prediction hints (`[[likely]]`/`[[unlikely]]`)
-- [ ] Measure cache hit rates
+- [ ] Measure cache hit rates with `perf stat -d`
+- [ ] Consider array-based price level for fixed price ranges
 
 ### Phase 6: Lock-Free & Concurrency [Pending]
 **Duration**: 1-2 weeks
 **Target**: Maintain throughput under contention
 
-- [x] SPSC queue already implemented
+- [x] SPSC queue already implemented (610M/s)
 - [ ] Symbol sharding across threads
 - [ ] Lock-free order ID generation
 - [ ] Thread pinning for latency stability
@@ -153,8 +163,8 @@ make -j$(nproc)
 |-------|---------|--------|--------|
 | 1. Foundation | 2 weeks | 1 week | Complete |
 | 2. Matching Engine | 2 weeks | 1 week | Complete |
-| 3. Benchmarking | 1 week | - | In Progress |
-| 4. Data Structures | 2 weeks | - | Pending |
+| 3. Benchmarking | 1 week | 1 week | Complete |
+| 4. Data Structures | 2 weeks | - | Next |
 | 5. Memory & Cache | 2 weeks | - | Pending |
 | 6. Lock-Free | 2 weeks | - | Pending |
 | 7. Agents | 1 week | - | Pending |
@@ -166,24 +176,26 @@ make -j$(nproc)
 
 ## Performance Targets by Phase
 
-| Phase | Throughput | p50 Latency | p99 Latency |
-|-------|------------|-------------|-------------|
-| 2 (Baseline) | 10K/sec | <100us | <1ms |
-| **2 (Actual)** | **3.3M/sec** | **32us** | **32us** |
-| 3 (Measured) | 3M+/sec | <50us | <100us |
-| 4 (Optimized) | 5M+/sec | <20us | <50us |
-| 5 (Cache) | 10M+/sec | <10us | <20us |
-| 6 (Final) | 10M+/sec | <5us | <10us |
+| Phase | AddOrder | Cancel | p50 Latency |
+|-------|----------|--------|-------------|
+| 2 (Original target) | 10K/sec | - | <100us |
+| **3 (Actual baseline)** | **5.8M/sec** | **180K/sec** | **~172ns** |
+| 4 (Cancel fix) | 6M+/sec | 2M+/sec | <150ns |
+| 5 (Cache opt) | 10M+/sec | 3M+/sec | <100ns |
+| 6 (Final) | 15M+/sec | 5M+/sec | <50ns |
 
 ---
 
 ## FAQ
 
 ### Why not start with lock-free queues?
-Lock-free code is hard to debug. Get correctness first, then optimize. We implemented SPSC queue in Phase 2 because it was straightforward and high-impact.
+Lock-free code is hard to debug. Get correctness first, then optimize. SPSC queue was implemented in Phase 2 because it was straightforward and high-impact.
 
-### Why is p50 = p99?
-The histogram buckets are coarse at low latencies. Most operations complete in the same bucket (~32us). As we optimize, we'll see more spread. This is actually a good sign - consistent latency.
+### Why is cancel so much slower than add?
+Cancel requires finding an order by ID within a price level. Currently implemented as a linear scan (`O(n)`). Fix is to add a hashmap from OrderId to OrderNode pointer inside PriceLevel, making it O(1). This is the Phase 4 priority.
+
+### Are these benchmark numbers realistic?
+The micro-benchmarks (5.8M/s add) are best-case with hot cache. Real throughput under load with network I/O, validation, and market data publishing is closer to 1-3M orders/sec — still competitive with production systems at smaller exchanges.
 
 ---
 
@@ -194,3 +206,4 @@ The histogram buckets are coarse at low latencies. Most operations complete in t
 - [Lock-Free Programming](https://preshing.com/20120612/an-introduction-to-lock-free-programming/)
 - [Erik Rigtorp's SPSCQueue](https://github.com/rigtorp/SPSCQueue)
 - [What Every Programmer Should Know About Memory](https://people.freebsd.org/~lstewart/articles/cpumemory.pdf)
+- [CppCon: When a Microsecond is an Eternity](https://www.youtube.com/watch?v=NH1Tta7purM) - Carl Cookmory](https://people.freebsd.org/~lstewart/articles/cpumemory.pdf)
