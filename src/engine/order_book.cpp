@@ -275,7 +275,6 @@ void OrderBook::match_order(Order &order) {
 
       // Remove filled resting order
       if (resting.is_filled()) [[likely]] {
-        level.pop_front();
         orders_.erase(resting_it);
       }
     }

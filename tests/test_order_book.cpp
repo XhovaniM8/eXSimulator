@@ -26,7 +26,7 @@ namespace test {
 struct TestResult {
   const char *name;
   bool passed;
-  const char *failure_reason;
+  std::string failure_reason;
 };
 
 static std::vector<TestResult> results;
@@ -62,7 +62,7 @@ static std::vector<TestResult> results;
   } while (0)
 
 static void run_test(const char *name, void (*fn)()) {
-  TestResult result{name, false, nullptr};
+  TestResult result{name, false, ""};
   try {
     fn();
     result.passed = true;
@@ -685,7 +685,7 @@ void run_all_tests() {
     } else {
       printf("✗ %s\n", result.name);
       printf("    %s\n",
-             result.failure_reason ? result.failure_reason : "Unknown error");
+             result.failure_reason.c_str());
       ++failed;
     }
   }
