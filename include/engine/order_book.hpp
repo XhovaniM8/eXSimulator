@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <map>
 #include <unordered_map>
 #include <vector>
 
@@ -120,9 +121,8 @@ private:
   std::unordered_map<OrderId, Order> orders_;
 
   // Price levels indexed by price
-  // Pre-allocated capacity for reduced rehashing
-  std::unordered_map<Price, PriceLevel> bid_levels_;
-  std::unordered_map<Price, PriceLevel> ask_levels_;
+  std::map<Price, PriceLevel> bid_levels_;
+  std::map<Price, PriceLevel> ask_levels_;
 
   // Cached best prices for O(1) access
   Price best_bid_;

@@ -12,8 +12,6 @@ OrderBook::OrderBook(Symbol symbol, const OrderBookConfig &config)
       last_bbo_ask_(INVALID_PRICE) {
   // Reserve hash map capacity to avoid rehashing in hot path
   orders_.reserve(10000);
-  bid_levels_.reserve(1000);
-  ask_levels_.reserve(1000);
 
   // Reserve trade buffer for batching
   if (config_.batch_callbacks) {
@@ -329,21 +327,19 @@ void OrderBook::remove_order_from_level(OrderId order_id, Side side,
 }
 
 void OrderBook::update_best_bid() {
-  best_bid_ = INVALID_PRICE;
-  for (const auto &[price, level] : bid_levels_) {
-    if (!level.empty() && (best_bid_ == INVALID_PRICE || price > best_bid_)) {
-      best_bid_ = price;
-    }
+  if (bid_levels_.empty()) {
+    best_bid_ = INVALID_PRICE;
+    return;
   }
+  best_bid_ = bid_levels_.rbegin()->first;
 }
 
 void OrderBook::update_best_ask() {
-  best_ask_ = INVALID_PRICE;
-  for (const auto &[price, level] : ask_levels_) {
-    if (!level.empty() && price < best_ask_) {
-      best_ask_ = price;
-    }
+  if (ask_levels_.empty()) {
+    best_ask_ = INVALID_PRICE;
+    return;
   }
+  best_ask_ = ask_levels_.begin()->first;
 }
 
 void OrderBook::emit_trade(const Order &buy, const Order &sell, Price price,
