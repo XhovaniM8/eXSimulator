@@ -159,3 +159,12 @@ target_link_libraries(test_order_book PRIVATE
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
+
+# Kraken replay benchmark
+add_executable(replay_kraken src/tools/replay_kraken.cpp)
+target_link_libraries(replay_kraken PRIVATE
+    exchange_engine
+    exchange_core
+    exchange_utils
+)
+target_compile_options(replay_kraken PRIVATE -Wno-conversion -Wno-sign-conversion -Wno-error)

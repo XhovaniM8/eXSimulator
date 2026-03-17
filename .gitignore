@@ -44,3 +44,5 @@ Thumbs.db
 perf.data*
 cachegrind.out.*
 callgrind.out.*
+data/*.jsonl
+data/*.bin
