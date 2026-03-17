@@ -46,3 +46,4 @@ cachegrind.out.*
 callgrind.out.*
 data/*.jsonl
 data/*.bin
+scripts/venv/
