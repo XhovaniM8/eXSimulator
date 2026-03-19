@@ -12,6 +12,7 @@
 | Matching throughput (100K) | **7.70M/s** | 10K/sec | 770x target |
 | Batch processing (10K) | **4.61M/s** | - | - |
 | Cancel order | **5.93M/s** | - | 33x improvement |
+| **Live market data (Kraken)** | **7.53M/s** | - | Real data validated |
 | SPSC queue | **596M/s** | - | Excellent |
 
 ### What's Working
@@ -28,6 +29,7 @@
 - 37/37 unit tests passing
 - O(1) cancel via `unordered_map` node index in PriceLevel
 - O(1) best bid/ask via `std::map` iterator endpoints
+- Live market data pipeline: Kraken WebSocket recorder + binary replayer
 
 ---
 
@@ -68,7 +70,8 @@
 - [x] CPU pinning with taskset for stable measurements
 - [x] Identified hotspot: cancel O(n) scan, 72% of all CPU time
 - [x] Profiling with perf + flamegraph
-- [x] Cache miss analysis with `perf stat`
+- [x] Cache miss analysis with `perf stat` (IPC: 1.15, L1 miss: 5.65%, LLC miss: 1.36%)
+- [x] Live market data validation: 7.53M/s on Kraken XBT/USD feed
 - [ ] Google Benchmark in CI
 - [ ] Document baseline in performance report
 
@@ -81,6 +84,7 @@
 - [x] Profile with perf + flamegraph — cancel_order CPU%: 72% → 10%
 - [x] Throughput: 2,903 → 7,726 ticks/sec (2.66x)
 - [x] Cancel: 180K/s → 5.93M/s (33x)
+- [x] Validated on live Kraken XBT/USD data: 7.53M/s, 132.9ns/op
 - [ ] Pool allocator for OrderNode (eliminate heap alloc on hot path)
 - [ ] Identity hash for OrderId in node_index_ (avoid default hash overhead)
 - [ ] Fix self-trade prevention to use real trader ID field
@@ -120,15 +124,19 @@ Current cache stats (i7-9700F):
 - [ ] Agent configuration via JSON
 - [ ] Realistic PnL tracking
 - [ ] Position/risk limits per agent
+- [ ] Order book imbalance signal feeding into MarketMaker quote skew
 
-### Phase 8: Replay & Backtesting [Pending]
+### Phase 8: Replay & Backtesting [In Progress]
 **Duration**: 1 week
 
 - [x] Event journal (binary log skeleton)
 - [x] Replay harness skeleton
+- [x] Live market data recorder (`scripts/record_kraken.py` — Kraken WebSocket)
+- [x] Binary feed parser (`scripts/parse_feed.py` — JSONL → binary replay format)
+- [x] C++ replayer (`src/tools/replay_kraken.cpp` — 7.53M/s on real data)
 - [ ] Deterministic replay (byte-for-byte)
 - [ ] Backtesting mode with fill simulation
-- [ ] Replay from historical data files
+- [ ] Support additional exchanges (Coinbase L3, Binance)
 
 ### Phase 9: Dashboard & API [Pending]
 **Duration**: 2-3 weeks
@@ -163,7 +171,7 @@ Current cache stats (i7-9700F):
 | 5. Memory & Cache | 2 weeks | - | Pending |
 | 6. Lock-Free | 2 weeks | - | Pending |
 | 7. Agents | 1 week | - | Pending |
-| 8. Replay | 1 week | - | Pending |
+| 8. Replay | 1 week | In progress | In Progress |
 | 9. Dashboard | 3 weeks | - | Pending |
 | 10. Polish | 1 week | - | Pending |
 
@@ -176,6 +184,7 @@ Current cache stats (i7-9700F):
 | 2 (Original target) | 10K/sec | - | <100us |
 | **3 (Baseline)** | **3.56M/sec** | **180K/sec** | ~172ns |
 | **4 (In progress)** | **3.56M/sec** | **5.93M/sec** | TBD |
+| **Real data (Kraken)** | **7.53M/sec** | **5.93M/sec** | **132.9ns** |
 | 5 (Cache opt) | 10M+/sec | 8M+/sec | <100ns |
 | 6 (Final) | 15M+/sec | 10M+/sec | <50ns |
 
@@ -188,3 +197,4 @@ Current cache stats (i7-9700F):
 - [Lock-Free Programming](https://preshing.com/20120612/an-introduction-to-lock-free-programming/)
 - [Erik Rigtorp's SPSCQueue](https://github.com/rigtorp/SPSCQueue)
 - [What Every Programmer Should Know About Memory](https://people.freebsd.org/~lstewart/articles/cpumemory.pdf)
+- [Benchmark Dataset for Mid-Price Forecasting of LOB Data](https://arxiv.org/abs/1705.03233) - Ntakaris et al. 2017

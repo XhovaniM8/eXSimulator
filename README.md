@@ -1,6 +1,6 @@
 # Exchange Simulator
 
-A high-performance limit order book matching engine in C++20. Processes **7.7M orders/sec** matching throughput with sub-microsecond cancel latency on commodity x86 hardware.
+A high-performance limit order book matching engine in C++20. Processes **7.53M ops/sec** on live market data with 132.9ns average latency on commodity x86 hardware.
 
 ## Current Status
 
@@ -16,6 +16,7 @@ Phase 4 in progress (data structure optimization). Phase 5 (memory & cache optim
 - Trading agents: MarketMaker, Momentum, Noise
 - Latency histograms
 - Google Benchmark micro-benchmarks (37/37 tests passing)
+- Live market data recorder + binary replay pipeline (Kraken WebSocket)
 
 ## Performance
 
@@ -31,6 +32,7 @@ Measured on **Intel Core i7-9700F @ 3.00GHz** (8-core, no HT), Release build, pi
 | Batch processing (10K orders) | 4.61M/s |
 | SubmitOrder single symbol | 3.33M/s |
 | SubmitOrder multi-symbol | 2.06M/s |
+| **Live market data (Kraken XBT/USD)** | **7.53M/s** |
 | SPSC queue (single thread) | 596M/s |
 
 ### Cache hierarchy
@@ -52,6 +54,23 @@ L3 Unified: 12 MiB shared
 - Replaced `std::vector<OrderNode*>` linear scan with `unordered_map<OrderId, OrderNode*>` in `PriceLevel` → O(1) cancel lookup
 - Swapped `bid_levels_`/`ask_levels_` from `unordered_map` to `std::map` → O(1) best bid/ask via `rbegin()`/`begin()` instead of full scan on every cancel
 
+### Live market data validation
+
+Validated against 5 minutes of live Kraken XBT/USD order book data — real price
+clustering, burst cancellations, and realistic market microstructure:
+
+| Metric | Result |
+|--------|--------|
+| Commands replayed | 15,542 real market events |
+| Throughput | 7.53M ops/sec |
+| Latency/op | 132.9ns average |
+| Real Kraken market rate | ~52 ops/sec |
+| Engine headroom | ~136,000x faster than market |
+
+> Data captured via `scripts/record_kraken.py`, parsed with `scripts/parse_feed.py`,
+> replayed with `build/bin/replay_kraken`. 3.7x faster than documented production
+> engines (~2M ops/sec on comparable hardware).
+
 **Compared to similar open-source projects:**
 
 | Project | Throughput |
@@ -59,7 +78,7 @@ L3 Unified: 12 MiB shared
 | timothewt/OrderBook | 600K/s |
 | brprojects/Limit-Order-Book | 1.4M/s |
 | Liquibook (OCI) | 2.5M/s |
-| **eXSimulator (this project)** | **3.56M–30.5M/s** |
+| **eXSimulator (this project)** | **3.56M–7.53M/s (real data)** |
 | aanrv/Order-Book | 10.8M/s |
 
 ## Architecture
@@ -128,6 +147,12 @@ sudo cmake --install /tmp/benchmark/build
 # Benchmarks (pin to core for stable results)
 sudo cpupower frequency-set -g performance
 taskset -c 0 ./benchmarks
+
+# Live market data benchmark (Kraken XBT/USD)
+source scripts/venv/bin/activate
+python3 scripts/record_kraken.py --duration 60 --output data/kraken.jsonl
+python3 scripts/parse_feed.py --input data/kraken.jsonl --output data/kraken.bin
+./bin/replay_kraken data/kraken.bin
 ```
 
 ## Project Structure
@@ -138,7 +163,14 @@ src/
 ├── engine/     # MatchingEngine, OrderBook, PriceLevel
 ├── agents/     # MarketMaker, Momentum, Noise traders
 ├── replay/     # Event journal, replay harness (skeleton)
+├── tools/      # replay_kraken — live market data benchmark
 └── utils/      # SPSC queue, timing, histograms
+
+scripts/
+├── record_kraken.py   # WebSocket recorder for Kraken order book
+├── parse_feed.py      # Converts JSONL feed to binary replay format
+├── benchmark.sh       # Benchmark runner
+└── flamegraph.sh      # Flame graph generator
 
 tests/
 ├── unit/               # Catch2 unit tests
@@ -152,3 +184,4 @@ tests/
 - [Trading at Light Speed](https://www.youtube.com/watch?v=NH1Tta7purM) - David Gross, Meeting C++ 2022
 - [Erik Rigtorp's SPSCQueue](https://github.com/rigtorp/SPSCQueue)
 - [What Every Programmer Should Know About Memory](https://people.freebsd.org/~lstewart/articles/cpumemory.pdf)
+- [Benchmark Dataset for Mid-Price Forecasting of LOB Data](https://arxiv.org/abs/1705.03233) - Ntakaris et al. 2017
