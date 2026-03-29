@@ -136,7 +136,7 @@ public:
     void record(uint64_t value) {
         ++count_;
         sum_ += value;
-        size_t bucket = std::min(value * NumBuckets / MaxValue, NumBuckets - 1);
+        size_t bucket = static_cast<size_t>(std::min(value * static_cast<uint64_t>(NumBuckets) / static_cast<uint64_t>(MaxValue), static_cast<uint64_t>(NumBuckets - 1)));
         ++buckets_[bucket];
     }
     
