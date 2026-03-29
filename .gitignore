@@ -33,8 +33,13 @@ dashboard/dist/
 dashboard/.env
 dashboard/.env.local
 
-# Personal
+# Private / local-only docs
+ROADMAP.md
+INTERVIEW.md
 MY_LEARNING_PLAN.md
+
+# Claude Code
+.claude/
 
 # OS
 .DS_Store
