@@ -140,8 +140,18 @@ if(BUILD_TESTS)
     endif()
 endif()
 
+# LOB exporter — generates LOBSTER-format synthetic data for fpga-orderbook-analysis
+add_executable(lob_export src/lob_export.cpp)
+target_link_libraries(lob_export PRIVATE
+    exchange_engine
+    exchange_agents
+    exchange_utils
+)
+# Relax -Werror for this tool since we use long long literals for large prices
+target_compile_options(lob_export PRIVATE -Wno-error)
+
 # Install
-install(TARGETS exchange_sim RUNTIME DESTINATION bin)
+install(TARGETS exchange_sim lob_export RUNTIME DESTINATION bin)
 install(DIRECTORY include/ DESTINATION include)
 
 # Unit tests
