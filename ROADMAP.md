@@ -1,209 +1,130 @@
-# Exchange Simulator Roadmap
+# Learning Goals & What's Left to Build
 
-## Current Status: Phase 4 Next
-
-**Last Updated**: February 2026
-
-### Performance Achieved (Release Build, Single Core)
-| Metric | Result | Original Target | Status |
-|--------|--------|-----------------|--------|
-| AddOrder throughput | **5.8M/s** | 10K/sec | 580x target |
-| Matching throughput (100K) | **9.7M/s** | 10K/sec | 970x target |
-| Batch processing | **6.0M/s** | - | - |
-| Cancel order | **180K/s** | - | Bottleneck |
-| SPSC queue | **610M/s** | - | Excellent |
-
-### What's Working
-- Full matching engine with price-time priority
-- All order types: Limit, Market, IOC, FOK, PostOnly
-- Self-trade prevention (basic)
-- SPSC lock-free queue for order ingestion
-- Cache-line aligned Order struct (64 bytes)
-- Multi-symbol support with sharding
-- Trading agents: MarketMaker, Momentum, Noise
-- Latency histograms
-- Google Benchmark micro-benchmarks
-- CI/CD pipeline
-- 37/37 unit tests passing
-
-### Known Bottleneck
-Cancel order is 30x slower than add (180K/s vs 5.8M/s) due to O(n) linear scan
-in `PriceLevel::find_node()`. Fix: replace `std::vector<OrderNode*>` with
-`std::unordered_map<OrderId, OrderNode*>` for O(1) lookup. Targeted in Phase 4.
+This file tracks what's been learned and what's worth exploring next. No timeline, no phases — just areas of systems and HFT knowledge organized by what you'd gain from working on them.
 
 ---
 
-## Phase Overview
+## What's Been Built and What Was Learned
 
-### Phase 1: Foundation [Complete]
-**Duration**: 1 week (vs 2 weeks planned)
+### Limit Order Book Core
 
-- [x] Order struct with fixed-size fields
-- [x] Symbol type (8-byte fixed)
-- [x] Price/Quantity types
-- [x] Side, OrderType, TimeInForce enums
-- [x] Basic OrderBook skeleton
-- [x] CMake build system
-- [x] CI pipeline (GitHub Actions)
+Built a full price-time priority matching engine with all standard order types (Limit, Market, IOC, FOK, PostOnly), cancel, replace, and self-trade prevention.
 
-### Phase 2: Matching Engine [Complete]
-**Duration**: 1 week (vs 2 weeks planned)
+**What you learned:** How an order book is actually structured. Why price-time priority means per-level FIFO queues, not a global sort. Why best bid/ask is cached rather than computed. How cancel semantics work (you cancel by order ID, not by price).
 
-- [x] Price-time priority (FIFO within price level)
-- [x] Limit order matching
-- [x] Market orders
-- [x] IOC (Immediate or Cancel)
-- [x] FOK (Fill or Kill)
-- [x] PostOnly (maker-only, reject if would cross)
-- [x] Cancel order
-- [x] Replace order (cancel + new)
-- [x] Self-trade prevention (order ID proximity)
-- [x] Unit tests for all order types (37/37 passing)
-- [x] Feature test executable
+### Fixed-Point Arithmetic
 
-**Known Issues (deferred to Phase 4)**:
-- Self-trade prevention uses order ID proximity as proxy for trader ID
-- `get_bids()`/`get_asks()` allocate on each call
-- Cancel is O(n) due to linear scan in PriceLevel
+All prices are `int64_t` in integer ticks. No `double`, no `float`.
 
-### Phase 3: Benchmarking [Complete]
-**Duration**: 1 week
+**What you learned:** Why floating-point is dangerous in financial systems — non-determinism across compilers and platforms, accumulating rounding error. Fixed-point is boring and correct. This is what real exchanges do.
 
-- [x] Baseline measurement: **5.8M orders/sec** (AddOrder), **9.7M/s** (matching at scale)
-- [x] Google Benchmark integration (order book, matching engine, queue benchmarks)
-- [x] Release build from source (removed debug-build system library)
-- [x] CPU pinning with taskset for stable measurements
-- [x] Identified hotspot: cancel O(n) scan is 30x slower than add
-- [ ] Google Benchmark in CI
-- [ ] Profiling with perf/flamegraph
-- [ ] Document baseline in performance report
+### Cache-Aligned Order Struct
 
-**Run benchmarks**:
-```bash
-cd build
-cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_BENCHMARKS=ON ..
-make -j$(nproc)
-taskset -c 0 ./benchmarks
-```
+`Order` is exactly 64 bytes — one cache line. Hot fields (id, price, qty, side, type) in the first 32 bytes. Cold fields (symbol, timestamp, trader id) in the second 32 bytes.
 
-### Phase 4: Data Structure Optimization [Next]
-**Duration**: 2 weeks
-**Target**: 2M+ cancel/sec, 10M+ add/sec
+**What you learned:** Cache lines are the unit of memory transfer. If the fields the matching engine needs on the hot path sit in the first cache line, the cold fields never need to be loaded. Hot/cold separation is a real technique used in HFT.
 
-- [ ] Replace `std::vector<OrderNode*>` in PriceLevel with `std::unordered_map<OrderId, OrderNode*>` → O(1) cancel
-- [ ] Fix self-trade prevention to use real trader ID field
-- [ ] Replace `std::unordered_map` for price levels with flat hashmap
-- [ ] Fix `get_bids()`/`get_asks()` to avoid per-call allocation
-- [ ] Pool allocator for OrderNode objects
-- [ ] Profile cache misses with `perf stat`
+### Lock-Free SPSC Queue
 
-### Phase 5: Memory & Cache Optimization [Pending]
-**Duration**: 1-2 weeks
-**Target**: 15M+ orders/sec, <5us p50
+Single-producer single-consumer ring buffer with cache-line padded indices. No mutexes.
 
-- [ ] Hot/cold data separation in Order struct
-- [ ] Prefetch hints for likely code paths
-- [ ] Measure cache hit rates with `perf stat -d`
-- [ ] Consider array-based price level for fixed price ranges
+**What you learned:** Why SPSC is special — you only need acquire/release semantics, not CAS loops. Why false sharing kills performance (the producer and consumer fight over the same cache line if indices aren't padded). How to think about memory ordering without going insane.
 
-### Phase 6: Lock-Free & Concurrency [Pending]
-**Duration**: 1-2 weeks
-**Target**: Maintain throughput under contention
+### O(1) Cancel via Hashmap Index
 
-- [x] SPSC queue already implemented (610M/s)
-- [ ] Symbol sharding across threads
-- [ ] Lock-free order ID generation
-- [ ] Thread pinning for latency stability
-- [ ] NUMA-aware allocation (if applicable)
+PriceLevel went from O(n) linear scan (vector) to O(1) hashmap lookup. Improvement: 180K/s → ~4.5M/s (25x).
 
-### Phase 7: Trading Agents [Pending]
-**Duration**: 1 week
+**What you learned:** Profiling before optimizing — the bottleneck was obvious once measured. How to maintain a parallel index structure (the linked list for FIFO order, the hashmap for random access) without breaking consistency.
 
-- [x] MarketMaker (two-sided quotes)
-- [x] Momentum (trend following)
-- [x] NoiseTrader (random flow)
-- [ ] Agent configuration via JSON
-- [ ] Realistic PnL tracking
-- [ ] Position/risk limits per agent
+### Benchmarking with Google Benchmark
 
-### Phase 8: Replay & Backtesting [Pending]
-**Duration**: 1 week
+Micro-benchmarks for add, cancel, match, and queue operations. Profiling with macOS `sample`.
 
-- [x] Event journal (binary log skeleton)
-- [x] Replay harness skeleton
-- [ ] Deterministic replay (byte-for-byte)
-- [ ] Backtesting mode with fill simulation
-- [ ] Replay from historical data files
-
-### Phase 9: Dashboard & API [Pending]
-**Duration**: 2-3 weeks
-
-- [ ] WebSocket market data publisher
-- [ ] REST control plane (start/stop/config)
-- [ ] React dashboard
-  - [ ] Real-time order book visualization
-  - [ ] Trades feed
-  - [ ] Latency charts
-  - [ ] Agent controls
-
-### Phase 10: Polish & Documentation [Pending]
-**Duration**: 1 week
-
-- [ ] Code cleanup and documentation
-- [ ] Design doc explaining tradeoffs
-- [ ] Performance write-up with charts
-- [ ] README with impressive numbers
-- [ ] Video demo
+**What you learned:** How to write meaningful benchmarks (fixture setup, preventing dead code elimination via `DoNotOptimize`). What the numbers actually mean — "always match" is 10x faster than "no match" because one allocates and one doesn't. How to read a CPU sample call tree.
 
 ---
 
-## Timeline Summary
+## What to Explore Next
 
-| Phase | Planned | Actual | Status |
-|-------|---------|--------|--------|
-| 1. Foundation | 2 weeks | 1 week | Complete |
-| 2. Matching Engine | 2 weeks | 1 week | Complete |
-| 3. Benchmarking | 1 week | 1 week | Complete |
-| 4. Data Structures | 2 weeks | - | Next |
-| 5. Memory & Cache | 2 weeks | - | Pending |
-| 6. Lock-Free | 2 weeks | - | Pending |
-| 7. Agents | 1 week | - | Pending |
-| 8. Replay | 1 week | - | Pending |
-| 9. Dashboard | 3 weeks | - | Pending |
-| 10. Polish | 1 week | - | Pending |
+### Memory Allocator: Pool Allocator for OrderNodes
+
+**The problem:** Every `new OrderNode(...)` calls the system allocator. The profiler shows `operator new` accounting for ~7% of samples in the hot path. The allocator touches cold memory (its internal free lists, OS pages).
+
+**What you'd learn:** How pool allocators work. Why HFT code often pre-allocates everything at startup. The difference between throughput-optimized and latency-optimized allocation strategies. You can benchmark before/after easily.
+
+**How hard:** ~100 lines of code. Low risk — PriceLevel is self-contained.
+
+### Data Structure: Replace std::map with a Flat Hash Map
+
+**The problem:** `std::map<Price, PriceLevel>` is a red-black tree. Each price level insertion allocates a tree node. Tree traversal is pointer-chasing through heap-scattered nodes. The profiler puts ~60% of `AddOrder_NoMatch` samples here.
+
+**What you'd learn:** Why cache locality matters for tree-structured data. How open-addressing hash maps (flat_hash_map) compare to chained hash maps (unordered_map). The tradeoff: trees give sorted iteration, hash maps don't — and how to deal with that.
+
+**How hard:** Medium. Requires careful handling of the "iterate in price order" case (for BBO updates and order book display).
+
+### Concurrency: True Multi-Threaded Producer-Consumer
+
+**The problem:** Agents and engine currently run synchronously on one thread. The SPSC queue is implemented and works, but the producer and consumer aren't on separate threads.
+
+**What you'd learn:** How to pin threads to cores. How SPSC latency changes under real cross-thread communication vs. single-thread simulation. What NUMA awareness means and whether it matters here.
+
+**How hard:** Low — the infrastructure is already there. It's mostly a `std::thread` + `pthread_setaffinity_np` exercise.
+
+### Concurrency: Symbol Sharding
+
+**The problem:** All symbols go through one matching thread.
+
+**What you'd learn:** How to partition work by key (symbol) to scale horizontally. Why sharding works (symbols are independent — no AAPL order affects a GOOGL order). The interesting exception: spread orders that cross symbols.
+
+**How hard:** Medium. Requires routing logic and one matching thread per shard.
+
+### Realism: TCP Order Gateway
+
+**The problem:** Everything runs in-process. There's no way to connect an external client.
+
+**What you'd learn:** How exchange gateways actually work. How to design a binary wire protocol (or a subset of FIX). How network latency relates to matching latency. `epoll`/`kqueue` for low-latency I/O.
+
+**How hard:** Medium-high. A minimal version (binary struct over TCP, no FIX) is maybe 500 lines. FIX protocol is a rabbit hole.
+
+### Realism: Better Agent Behavior
+
+**The problem:** MarketMaker, Momentum, and Noise traders are very simple. The book they generate doesn't behave like a real market.
+
+**What you'd learn:** Basic market microstructure — how spreads emerge, why momentum strategies create trends, what informed vs. uninformed order flow looks like. How to model mean-reverting prices. PnL tracking and position limits.
+
+**How hard:** Low-medium. Mostly math and calibration, not systems code.
+
+### Observability: Flamegraph
+
+**The problem:** The `sample` call tree is hard to read at a glance. A flamegraph makes hot paths obvious visually.
+
+**What you'd learn:** How to use Instruments (macOS) or `perf` + FlameGraph scripts (Linux) to generate a flamegraph. How to interpret one — wide bars are hot, tall stacks are deep call chains.
+
+**How hard:** Very low. Just a tooling exercise.
+
+### Replay: Deterministic Event Journal
+
+**The problem:** The event journal skeleton exists but replay isn't implemented. You can't reproduce a simulation exactly.
+
+**What you'd learn:** Event sourcing — how to record all inputs, replay them, and get the same output. Why this matters for debugging (reproduce the exact state at crash time) and backtesting (run historical data through the engine).
+
+**How hard:** Medium. The journal format needs care — binary, versioned, order-preserving.
 
 ---
 
-## Performance Targets by Phase
+## Current Performance Snapshot
 
-| Phase | AddOrder | Cancel | p50 Latency |
-|-------|----------|--------|-------------|
-| 2 (Original target) | 10K/sec | - | <100us |
-| **3 (Actual baseline)** | **5.8M/sec** | **180K/sec** | **~172ns** |
-| 4 (Cancel fix) | 6M+/sec | 2M+/sec | <150ns |
-| 5 (Cache opt) | 10M+/sec | 3M+/sec | <100ns |
-| 6 (Final) | 15M+/sec | 5M+/sec | <50ns |
+Measured on Apple M-series (10 cores), Release build (`-O3 -march=native`):
 
----
+| Benchmark | Throughput |
+|-----------|-----------|
+| AddOrder (no match) | ~4.5M/s |
+| AddOrder (always match) | ~47M/s |
+| AddOrder (same price level) | ~7M/s |
+| CancelOrder (PriceLevel) | ~4.5M/s |
+| CancelOrder (MatchingEngine) | ~7M/s |
+| Matching throughput (100K) | ~10M/s |
+| SPSC queue (single thread) | ~104M/s |
+| SPSC queue (producer-consumer) | ~11M/s |
 
-## FAQ
-
-### Why not start with lock-free queues?
-Lock-free code is hard to debug. Get correctness first, then optimize. SPSC queue was implemented in Phase 2 because it was straightforward and high-impact.
-
-### Why is cancel so much slower than add?
-Cancel requires finding an order by ID within a price level. Currently implemented as a linear scan (`O(n)`). Fix is to add a hashmap from OrderId to OrderNode pointer inside PriceLevel, making it O(1). This is the Phase 4 priority.
-
-### Are these benchmark numbers realistic?
-The micro-benchmarks (5.8M/s add) are best-case with hot cache. Real throughput under load with network I/O, validation, and market data publishing is closer to 1-3M orders/sec — still competitive with production systems at smaller exchanges.
-
----
-
-## Resources
-
-- [How to Build a Fast Limit Order Book](https://web.archive.org/web/20110219163448/http://howtohft.wordpress.com/2011/02/15/how-to-build-a-fast-limit-order-book/)
-- [Trading at Light Speed](https://www.youtube.com/watch?v=NH1Tta7purM) - David Gross, Meeting C++ 2022
-- [Lock-Free Programming](https://preshing.com/20120612/an-introduction-to-lock-free-programming/)
-- [Erik Rigtorp's SPSCQueue](https://github.com/rigtorp/SPSCQueue)
-- [What Every Programmer Should Know About Memory](https://people.freebsd.org/~lstewart/articles/cpumemory.pdf)
-- [CppCon: When a Microsecond is an Eternity](https://www.youtube.com/watch?v=NH1Tta7purM) - Carl Cookmory](https://people.freebsd.org/~lstewart/articles/cpumemory.pdf)
+The 10x gap between "always match" and "no match" is the cost of `std::map` tree insertion + heap allocation. That's the next measurable thing to attack.

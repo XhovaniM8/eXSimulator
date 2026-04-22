@@ -23,9 +23,8 @@ compile_commands.json
 *.folded
 
 # Data
-data/logs/
-data/perf/
-data/benchmarks/
+data/
+logs/
 
 # Dashboard
 dashboard/node_modules/
@@ -35,6 +34,10 @@ dashboard/.env.local
 
 # Personal
 MY_LEARNING_PLAN.md
+INTERVIEW.md
+
+# Claude Code
+.claude/
 
 # OS
 .DS_Store
