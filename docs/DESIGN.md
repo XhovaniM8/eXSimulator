@@ -34,12 +34,14 @@ Currently single-threaded. Multi-threaded symbol sharding is planned for Phase 6
 ### Data Structures
 
 #### Order Book
+
 - **Bid/Ask sides**: Separate hash maps from price -> PriceLevel
 - **PriceLevel**: Doubly-linked list for O(1) cancel
 - **Best price**: Cached for O(1) access
 - **Order storage**: Flat map from OrderId -> Order
 
 #### Price Level Queue (FIFO)
+
 ```cpp
 struct PriceLevel {
     Price price;
@@ -51,6 +53,7 @@ struct PriceLevel {
 ```
 
 #### Order Layout (64 bytes, cache-line aligned)
+
 ```cpp
 struct alignas(64) Order {
     // Hot fields (32 bytes)
@@ -72,32 +75,36 @@ struct alignas(64) Order {
 ```
 
 ### SPSC Queue
+
 - Lock-free bounded ring buffer
 - Cache-line padded indices
 - Local index caching for reduced contention
 
 ## Performance Targets
 
-| Metric | Target | Notes |
-|--------|--------|-------|
-| Throughput | 1M+ orders/sec | Single symbol, single thread |
-| p50 Latency | <1us | Order submission to ack |
-| p99 Latency | <10us | Including worst-case matching |
-| Memory/Order | <64 bytes | Cache-line aligned |
+| Metric       | Target         | Notes                         |
+| ------------ | -------------- | ----------------------------- |
+| Throughput   | 1M+ orders/sec | Single symbol, single thread  |
+| p50 Latency  | <1us           | Order submission to ack       |
+| p99 Latency  | <10us          | Including worst-case matching |
+| Memory/Order | <64 bytes      | Cache-line aligned            |
 
 ## Key Optimizations
 
 ### Cache Efficiency
+
 - Cache-line aligned structures
 - Hot/cold field separation
 - Contiguous memory for price levels
 
 ### Lock-Free Design
+
 - SPSC queues between threads
 - Atomic sequence numbers
 - No mutexes on hot path
 
 ### Compile-Time
+
 - Template metaprogramming for type safety
 - `constexpr` where possible
 - `-fno-exceptions -fno-rtti` for minimal overhead
@@ -105,11 +112,13 @@ struct alignas(64) Order {
 ## Benchmarking
 
 ### Latency Measurement
+
 - rdtsc for cycle-accurate timing
 - Calibrated to nanoseconds
 - HDR histogram for percentiles
 
 ### Metrics Collected
+
 - Order latency (submit -> ack)
 - Match latency (order -> fill)
 - Tick latency (all agents processed)
@@ -117,6 +126,7 @@ struct alignas(64) Order {
 - Memory usage
 
 ### Profiling
+
 - perf + FlameGraph for CPU hotspots
 - cachegrind for cache analysis
 - perf stat for hardware counters

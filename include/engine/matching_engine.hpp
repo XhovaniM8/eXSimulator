@@ -4,8 +4,6 @@
 #include "core/trade.hpp"
 #include "engine/order_book.hpp"
 #include "utils/spsc_queue.hpp"
-#include <memory>
-#include <unordered_map>
 
 namespace exchange {
 
