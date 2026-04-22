@@ -5,8 +5,15 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_benchmarks:
+        description: 'Run benchmarks on self-hosted runners'
+        type: boolean
+        default: true
 
 jobs:
+  # Always runs on GitHub-hosted runner — correctness check only
   check:
     runs-on: ubuntu-24.04
     steps:
@@ -32,30 +39,69 @@ jobs:
     - name: Smoke test
       run: build/exchange_sim --symbols 2 --agents 10 --ticks 1000
 
-  benchmark:
-    runs-on: ubuntu-24.04
+  # Apple Silicon (MacBook) — self-hosted, triggered manually or on main push
+  # Setup: Settings → Actions → Runners → New self-hosted runner → macOS → label it "apple"
+  benchmark-apple:
+    runs-on: [self-hosted, apple]
     needs: check
-    if: github.ref == 'refs/heads/main'
+    if: |
+      (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') &&
+      (github.event_name != 'workflow_dispatch' || inputs.run_benchmarks)
+    continue-on-error: true
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Configure
+      run: |
+        cmake -B build \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DBUILD_BENCHMARKS=ON \
+          -DBUILD_TESTS=OFF \
+          -DCMAKE_PREFIX_PATH=/opt/homebrew
+
+    - name: Build
+      run: cmake --build build --target benchmarks -j4
+
+    - name: Run benchmarks
+      run: |
+        echo "## Benchmark Results — Apple Silicon ($(uname -m))" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        build/benchmarks --benchmark_format=console \
+          --benchmark_min_time=1s 2>&1 | tee -a $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+
+  # Intel Ubuntu (home machine) — self-hosted, triggered manually or on main push
+  # Setup: Settings → Actions → Runners → New self-hosted runner → Linux → label it "intel"
+  benchmark-intel:
+    runs-on: [self-hosted, intel]
+    needs: check
+    if: |
+      (github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch') &&
+      (github.event_name != 'workflow_dispatch' || inputs.run_benchmarks)
+    continue-on-error: true
     steps:
     - uses: actions/checkout@v4
 
     - name: Install dependencies
-      run: sudo apt-get update && sudo apt-get install -y cmake ninja-build
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y cmake ninja-build libbenchmark-dev
 
     - name: Configure
       run: |
         cmake -B build -G Ninja \
           -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_CXX_FLAGS="-Wno-interference-size" \
-          -DBUILD_TESTS=OFF \
-          -DBUILD_BENCHMARKS=OFF
+          -DBUILD_BENCHMARKS=ON \
+          -DBUILD_TESTS=OFF
 
     - name: Build
-      run: cmake --build build
+      run: cmake --build build --target benchmarks
 
-    - name: Benchmark
+    - name: Pin CPU and run benchmarks
       run: |
-        echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
+        echo "## Benchmark Results — Intel $(grep 'model name' /proc/cpuinfo | head -1 | cut -d: -f2 | xargs)" >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
-        build/exchange_sim --symbols 4 --agents 50 --ticks 100000 2>&1 | tee -a $GITHUB_STEP_SUMMARY
+        taskset -c 0 build/benchmarks --benchmark_format=console \
+          --benchmark_min_time=1s 2>&1 | tee -a $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
