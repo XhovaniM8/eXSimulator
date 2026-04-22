@@ -23,9 +23,8 @@ compile_commands.json
 *.folded
 
 # Data
-data/logs/
-data/perf/
-data/benchmarks/
+data/
+logs/
 
 # Dashboard
 dashboard/node_modules/
@@ -33,10 +32,9 @@ dashboard/dist/
 dashboard/.env
 dashboard/.env.local
 
-# Private / local-only docs
-ROADMAP.md
-INTERVIEW.md
+# Personal
 MY_LEARNING_PLAN.md
+INTERVIEW.md
 
 # Claude Code
 .claude/
@@ -49,6 +47,4 @@ Thumbs.db
 perf.data*
 cachegrind.out.*
 callgrind.out.*
-data/*.jsonl
-data/*.bin
 scripts/venv/

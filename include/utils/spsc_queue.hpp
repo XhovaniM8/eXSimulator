@@ -75,21 +75,15 @@ public:
     return *item;
   }
 
-  [[nodiscard]] size_t size_approx() const {
+  size_t size_approx() const {
     const size_t head = head_.load(std::memory_order_relaxed);
     const size_t tail = tail_.load(std::memory_order_relaxed);
     return (head - tail + Capacity) & (Capacity - 1);
   }
 
-  [[nodiscard]] bool empty() const {
+  bool empty() const {
     return head_.load(std::memory_order_relaxed) ==
            tail_.load(std::memory_order_relaxed);
-  }
-
-  [[nodiscard]] bool full() const {
-    const size_t head = head_.load(std::memory_order_relaxed);
-    const size_t tail = tail_.load(std::memory_order_relaxed);
-    return ((head + 1) & (Capacity - 1)) == tail;
   }
 
   static constexpr size_t capacity() { return Capacity; }
