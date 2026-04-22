@@ -1,22 +1,22 @@
-# Design Deep-Dive
+# Design Notes
 
-Architecture decisions, data structure tradeoffs, profiling results, and what to do next.
+Architecture decisions, data structure tradeoffs, and profiling results. Started this after going deep on [Coding Jesus](https://www.youtube.com/@CodingJesus)'s content on order books — the gap between "I understand what an order book is" and "I understand what makes one fast" turned out to be significant.
 
 ---
 
 ## Data Structures
 
-### OrderBook: Two sides, sorted by price
+### OrderBook
 
-Each `OrderBook` holds two `std::map<Price, PriceLevel>` — one for bids (descending), one for asks (ascending). `std::map` is a red-black tree, which gives O(log n) insert and lookup where n is the number of distinct price levels active at once.
+Each `OrderBook` holds two `std::map<Price, PriceLevel>` — bids (descending) and asks (ascending). `std::map` is a red-black tree: O(log n) insert and lookup where n is the number of distinct active price levels.
 
-For most symbols in normal market conditions, n stays small — maybe 10–50 active levels. The log factor doesn't matter much there. What does matter is that `std::map` heap-allocates a node for each price level, and that allocation shows up in profiling.
+For most symbols under normal conditions, n stays small — 10–50 active levels. The log factor isn't the problem. The problem is `std::map` heap-allocates a node per price level, and that allocation shows up clearly in profiling.
 
-The best bid and best ask are cached separately (`best_bid_`, `best_ask_`) so the matching engine can check for a cross in O(1) without touching the tree.
+Best bid and best ask are cached separately (`best_bid_`, `best_ask_`) so the matching engine checks for a cross in O(1) without touching the tree.
 
 ### PriceLevel: Intrusive doubly-linked list + hashmap index
 
-Each price level is a FIFO queue of orders waiting at that price. The data structure is an intrusive doubly-linked list (each `OrderNode` has `prev`/`next` pointers stored directly in the node) with a parallel `unordered_map<OrderId, OrderNode*>` for cancel lookups.
+Each price level is a FIFO queue of orders at that price. Intrusive doubly-linked list (each `OrderNode` carries `prev`/`next` directly) with a parallel `unordered_map<OrderId, OrderNode*>` for cancel lookups.
 
 ```
 head → [OrderNode A] ↔ [OrderNode B] ↔ [OrderNode C] ← tail
@@ -24,19 +24,18 @@ head → [OrderNode A] ↔ [OrderNode B] ↔ [OrderNode C] ← tail
                node_index_[order_id_B] ──────────┘
 ```
 
-**Front removal** (when a match happens): unlink `head`, erase from `node_index_`, delete node — O(1).
+- **Front removal** (match happens): unlink `head`, erase from `node_index_`, delete node — O(1).
+- **Cancel**: `node_index_.find(id)` → O(1) pointer → `unlink()` — O(1) total.
 
-**Cancel** (order withdrawn before matching): `node_index_.find(id)` → O(1) pointer → `unlink()` → O(1) total.
+Before this fix, `PriceLevel` used a `std::vector<OrderNode*>` with a linear scan to find the target node. Cancel was O(n) in orders at that level. The measured improvement after switching to the hashmap index: **180K/s → ~4.5M/s** (25x).
 
-Before the cancel fix, `PriceLevel` used a `std::vector<OrderNode*>` and scanned linearly to find the node. Cancel was O(n) in the number of orders at that price level. With the `unordered_map` index, it's O(1). The measured improvement: **180K/s → ~4.5M/s** (25x).
+### Order storage
 
-### Order storage: unordered_map<OrderId, Order>
-
-The matching engine keeps every live order in an `unordered_map<OrderId, Order>`. This lets it validate cancels, update quantities on replace, and prevent self-trades. The Order struct is 64-byte aligned, so insertions trigger aligned `operator new` calls.
+The matching engine keeps all live orders in an `unordered_map<OrderId, Order>`. Used to validate cancels, update quantities on replace, and prevent self-trades. The Order struct is 64-byte aligned, so insertions trigger aligned `operator new`.
 
 ### SPSC Queue
 
-A bounded ring buffer with two atomic indices (`head_`, `tail_`) and cache-line padding between them. The producer thread writes to `tail_`; the consumer reads from `head_`. Because there's only one writer and one reader, no compare-and-swap is needed — just load and store with `memory_order_acquire`/`release`.
+Bounded ring buffer with two atomic indices (`head_`, `tail_`) and cache-line padding between them. Producer writes to `tail_`, consumer reads from `head_`. Single writer, single reader — no compare-and-swap needed, just `memory_order_acquire`/`release` loads and stores.
 
 ```
 cache line 0: [head_] [padding...]    ← consumer reads this
@@ -44,15 +43,15 @@ cache line 1: [tail_] [padding...]    ← producer writes this
 cache line 2+: [slot 0][slot 1]...    ← data
 ```
 
-Keeping `head_` and `tail_` on separate cache lines prevents false sharing: the consumer doesn't invalidate the producer's cache line and vice versa. Throughput: ~104M/s single-thread, ~11M/s cross-thread (the gap is cache coherence traffic between cores).
+Keeping `head_` and `tail_` on separate cache lines prevents false sharing — the consumer doesn't invalidate the producer's cache line. Throughput: ~104M/s single-thread, ~11M/s cross-thread (the gap is cache coherence traffic between cores).
 
 ---
 
 ## Profiling Results
 
-Profiled `AddOrder_NoMatch` benchmark using macOS `/usr/bin/sample` (8 seconds, 1ms intervals). This benchmark repeatedly adds orders at fresh price levels — the worst case for the tree.
+Profiled `AddOrder_NoMatch` using macOS `/usr/bin/sample` (8 seconds, 1ms intervals). This benchmark adds orders at fresh price levels every iteration — worst case for the tree.
 
-**Summary of the call tree (6531 samples total):**
+**Call tree (6531 samples total):**
 
 ```
 6531  AddOrder_NoMatch benchmark loop
@@ -68,29 +67,21 @@ Profiled `AddOrder_NoMatch` benchmark using macOS `/usr/bin/sample` (8 seconds, 
             └──  416  operator new (aligned, 64-byte) ← alloc per Order object
 ```
 
-**What this tells us:**
+The dominant cost is price level tree insertion. Every unique price level that doesn't already exist triggers a `new` inside `std::map`. Since this benchmark creates a fresh level per order, every single add hits the allocator.
 
-The dominant cost in `AddOrder_NoMatch` is the price level tree insertion. Specifically:
-- Every unique price level that doesn't already exist causes a `new` call inside `std::map` to allocate a tree node.
-- The benchmark creates a fresh price level for every order, so every single add triggers a heap allocation.
+Secondary cost is order storage — the `unordered_map<OrderId, Order>` also triggers aligned allocations on growth or 64-byte Order emplacement.
 
-The secondary cost is order storage — the `unordered_map<OrderId, Order>` also triggers aligned allocations when it needs to grow or when a 64-byte Order is emplaced.
+**IPC:** 330B instructions / 120B cycles = **2.73 IPC**. On M-series (capable of 4–5+ IPC when cache-hot), 2.73 suggests moderate cache pressure. The allocator calls are the main culprit — they touch cold memory.
 
-**IPC analysis:** 330B instructions / 120B cycles = **2.73 IPC**. On Apple M-series (capable of 4–5+ IPC when cache-hot), 2.73 IPC suggests moderate cache pressure but not a complete cache disaster. The allocator calls are the main culprit — they touch cold memory.
-
-**The "always match" benchmark runs at 47M/s** because matching never inserts into the tree — it just removes from the front of an existing level. No allocation, pure linked-list traversal. That's 10x faster than add-with-insert.
+**"Always match" runs at 47M/s** because matching never inserts into the tree — it just removes from the front of an existing level. No allocation, pure linked-list traversal. That's the ceiling. Real workloads land somewhere in between depending on order flow mix.
 
 ---
 
-## What to Work On Next
-
-These are ordered by learning value and expected impact.
+## Next Steps
 
 ### 1. Pool allocator for OrderNodes
 
-Every cancel and every partial fill currently calls `delete node`. Every new order calls `new OrderNode(...)`. The allocator overhead is visible in the profile — both the `new` inside `std::map` (for tree nodes) and the `new` inside `PriceLevel::add_order()`.
-
-A simple fix: a fixed-size pool of `OrderNode` objects, allocated upfront as a contiguous array. `alloc()` returns the next free slot; `free()` returns it to the pool. No system malloc on the hot path.
+Every cancel and partial fill calls `delete node`. Every new order calls `new OrderNode(...)`. Visible in the profile. Fix: pre-allocate a contiguous array of `OrderNode` objects, hand them out from a free list.
 
 ```cpp
 struct NodePool {
@@ -104,74 +95,72 @@ struct NodePool {
 };
 ```
 
-Expected impact: removes the `operator new` samples from the profile for PriceLevel. The `std::map` tree node allocations would remain until the price level map itself is replaced.
+Removes `operator new` samples from PriceLevel. The `std::map` tree node allocations remain until the price level map itself is replaced.
 
 ### 2. Replace std::map with a flat hash map for price levels
 
-`std::map` (red-black tree) allocates a heap node per price level and has poor cache locality — walking the tree pointer-chases through scattered memory. A flat hash map stores entries in a contiguous array. Cache-friendly, no per-entry allocation.
+`std::map` allocates a heap node per price level and pointer-chases through scattered memory. A flat hash map stores entries contiguously — cache-friendly, no per-entry allocation.
 
-The tradeoff: `std::map` iterates in sorted order (useful for walking bids/asks to find the best price). A hash map doesn't. Solutions:
-- Keep a separate sorted structure just for iteration (rarely needed on the hot path)
-- Use `std::flat_map` (C++23) — sorted, contiguous, but O(n) insert in worst case
-- Two structures: hash map for O(1) lookup, maintain `best_bid_`/`best_ask_` manually
+The tradeoff: `std::map` iterates in sorted order, which matters for walking bids/asks. A hash map doesn't. Options:
 
-This directly addresses what the profiler showed as the #1 bottleneck.
+- Keep a separate sorted structure for iteration (rarely needed on the hot path)
+- `std::flat_map` (C++23) — sorted, contiguous, but O(n) insert worst case
+- Hash map for O(1) lookup + manually maintain `best_bid_`/`best_ask_`
 
-### 3. Fix get_bids() / get_asks() to avoid per-call allocation
+This directly addresses the #1 bottleneck the profiler shows.
 
-`get_bids()` and `get_asks()` currently return `std::vector<PriceLevel*>` built fresh on each call. Options:
-- Return a view/span into the internal data
-- Pass in a pre-allocated output buffer
-- Expose an iterator range instead of a concrete container
+### 3. Fix get_bids() / get_asks() allocation
+
+`get_bids()` and `get_asks()` currently return `std::vector<PriceLevel*>` built fresh on each call. Easy fixes:
+
+- Return a view/span into internal data
+- Pass a pre-allocated output buffer
+- Expose an iterator range
 
 ### 4. Symbol sharding across threads
 
-Currently all symbols run on one matching thread. Sharding by symbol — routing AAPL orders to thread 0, GOOGL to thread 1, etc. — would scale throughput linearly with the number of independent symbols. Each shard gets its own SPSC queue and matching engine instance. No cross-shard synchronization needed since symbols are independent.
+All symbols currently run on one matching thread. Sharding by symbol — AAPL to thread 0, GOOGL to thread 1, etc. — would scale throughput linearly with independent symbol count. Each shard gets its own SPSC queue and engine instance, no cross-shard synchronization needed.
 
-The interesting edge case: what do you do when a trader wants to leg into a cross-symbol spread? Real exchanges handle this with a separate spread book layer.
+Edge case: spread trades that leg across symbols. Real exchanges handle this with a separate spread book layer.
 
 ### 5. TCP order gateway
 
-Everything currently runs in-process — agents submit orders by calling functions directly. Adding a TCP gateway would:
-- Let you connect a real client (even a Python script sending raw bytes) to the simulator
-- Separate submission latency from matching latency
-- Teach you about the FIX protocol, or designing a binary wire format from scratch
-
-A minimal gateway: `epoll`-based server (Linux) or `kqueue` (macOS), one connection per client, binary order struct over the wire, fill notifications streamed back.
+Everything runs in-process right now — agents submit by calling functions directly. A TCP gateway would let an external client (even a Python script) connect and submit orders, and would separate submission latency from matching latency. Minimal version: `epoll`-based server (Linux) or `kqueue` (macOS), binary order struct over the wire, fills streamed back.
 
 ### 6. Flamegraph on macOS
 
-The `sample` tool gives a call tree as text. Xcode's Instruments can record the same data as a visual flamegraph:
+`sample` gives a text call tree. Instruments gives the same data as a visual flamegraph:
 
 ```bash
 xctrace record --template 'Time Profiler' --launch -- ./build/benchmarks \
     --benchmark_filter="AddOrder_NoMatch" --benchmark_min_time=8s
-# then open the .trace file in Instruments.app
+# open the .trace file in Instruments.app
 ```
 
-On Linux: `perf record -g ./benchmarks && perf script | stackcollapse-perf.pl | flamegraph.pl > flame.svg`
+Linux: `perf record -g ./benchmarks && perf script | stackcollapse-perf.pl | flamegraph.pl > flame.svg`
 
 ---
 
 ## Threading Model
 
-Currently single-threaded matching with a simulated SPSC queue (the queue exists but producer and consumer run sequentially in the main loop). Full multi-threaded operation would look like:
+Currently single-threaded matching with a simulated SPSC queue — the queue exists but producer and consumer run sequentially in the main loop. Full multi-threaded operation:
 
 ```
 Thread 0 (agents): agent.tick() → spsc_queue.push(order)
 Thread 1 (engine): while (true) { spsc_queue.pop(order); engine.process(order); }
 ```
 
-The queue supports true two-thread operation today — the agents just run synchronously for simplicity.
+The queue supports true two-thread operation today — agents just run synchronously for simplicity.
 
 ---
 
 ## Benchmark Notes
 
-Numbers vary based on machine load and CPU frequency scaling. For stable readings:
-- Pin to a single core: `taskset -c 0 ./benchmarks` (Linux) — macOS doesn't support `taskset`
-- Build with `-O3 -march=native` (the Release preset does this)
-- Run with no other CPU-intensive processes
-- Use `--benchmark_min_time=3s` for tighter confidence intervals
+Numbers vary with machine load and CPU frequency scaling. For stable readings:
 
-The "AddOrder always match" benchmark (47M/s) is an upper bound — it fills from a pre-populated book with a single price level, so no tree insertion happens and the cache stays maximally hot. Real workloads sit somewhere between that and the "no match" case depending on order flow mix.
+- Pin to a single core: `taskset -c 0 ./benchmarks` (Linux only — macOS doesn't have `taskset`)
+- Build with `-O3 -march=native` (the Release preset does this)
+- No other CPU-intensive processes running
+- `--benchmark_min_time=3s` for tighter confidence intervals
+
+"AddOrder always match" (47M/s) is an upper bound — fills from a pre-populated book with one price level, so no tree insertion and the cache stays hot. Real workloads sit between that and the "no match" case.
