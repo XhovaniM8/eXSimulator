@@ -1,5 +1,8 @@
 #pragma once
 
+#include <atomic>
+#include <memory>
+
 #include "core/order.hpp"
 #include "core/trade.hpp"
 #include "engine/order_book.hpp"
