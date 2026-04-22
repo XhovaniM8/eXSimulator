@@ -1,4 +1,5 @@
 #include <chrono>
+#include <cinttypes>
 #include <cstdio>
 #include <cstdlib>
 #include <string>
@@ -158,22 +159,22 @@ int main(int argc, char** argv) {
     // Print results
     printf("\nResults\n");
     printf("-------\n");
-    printf("Duration:     %ld ms\n", duration_ms);
+    printf("Duration:     %" PRId64 " ms\n", (int64_t)duration_ms);
     printf("Ticks/sec:    %.0f\n", 1000.0 * static_cast<double>(config.num_ticks) / static_cast<double>(duration_ms));
-    printf("Trades:       %lu\n", trade_count);
-    printf("Volume:       %lu\n", total_volume);
-    printf("Orders:       %lu\n", engine.stats().orders_received);
-    printf("Orders/sec:   %.0f\n", 
+    printf("Trades:       %" PRIu64 "\n", trade_count);
+    printf("Volume:       %" PRIu64 "\n", total_volume);
+    printf("Orders:       %" PRIu64 "\n", engine.stats().orders_received);
+    printf("Orders/sec:   %.0f\n",
            1000.0 * static_cast<double>(engine.stats().orders_received) / static_cast<double>(duration_ms));
-    
+
     printf("\nTick Latency (ns)\n");
     printf("-----------------\n");
-    printf("Min:    %lu\n", latency_hist.min());
-    printf("p50:    %lu\n", latency_hist.p50());
-    printf("p90:    %lu\n", latency_hist.p90());
-    printf("p99:    %lu\n", latency_hist.p99());
-    printf("p99.9:  %lu\n", latency_hist.p999());
-    printf("Max:    %lu\n", latency_hist.max());
+    printf("Min:    %" PRIu64 "\n", latency_hist.min());
+    printf("p50:    %" PRIu64 "\n", latency_hist.p50());
+    printf("p90:    %" PRIu64 "\n", latency_hist.p90());
+    printf("p99:    %" PRIu64 "\n", latency_hist.p99());
+    printf("p99.9:  %" PRIu64 "\n", latency_hist.p999());
+    printf("Max:    %" PRIu64 "\n", latency_hist.max());
     printf("Mean:   %.1f\n", latency_hist.mean());
     
     return 0;
