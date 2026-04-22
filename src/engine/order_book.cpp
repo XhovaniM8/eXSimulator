@@ -10,10 +10,8 @@ OrderBook::OrderBook(Symbol symbol, const OrderBookConfig &config)
     : symbol_(symbol), config_(config), best_bid_(INVALID_PRICE),
       best_ask_(INVALID_PRICE), next_seq_num_(1), last_bbo_bid_(INVALID_PRICE),
       last_bbo_ask_(INVALID_PRICE) {
-  // Reserve hash map capacity to avoid rehashing in hot path
   orders_.reserve(10000);
 
-  // Reserve trade buffer for batching
   if (config_.batch_callbacks) {
     pending_trades_.reserve(config_.trade_batch_size);
   }
@@ -25,7 +23,6 @@ OrderResult OrderBook::add_order(Order order) {
   OrderResult result{};
   result.order_id = order.id;
 
-  // Fast path validations with branch prediction hints
   if (order.quantity == 0) [[unlikely]] {
     result.success = false;
     result.reject_reason = RejectReason::InvalidQuantity;
@@ -52,7 +49,6 @@ OrderResult OrderBook::add_order(Order order) {
     return result;
   }
 
-  // post-only can't cross
   if (order.type == OrderType::PostOnly && config_.enable_post_only_rejection)
       [[unlikely]] {
     bool would_cross = false;
@@ -92,7 +88,6 @@ OrderResult OrderBook::add_order(Order order) {
     }
   }
 
-  // Main matching logic - hot path
   match_order(order);
 
   result.filled_qty = order.filled_qty;
@@ -100,7 +95,6 @@ OrderResult OrderBook::add_order(Order order) {
       order.filled_qty > 0 ? (order.price * order.filled_qty) / order.filled_qty
                            : 0;
 
-  // Handle time-in-force logic
   if (order.tif == TimeInForce::ImmediateOrCancel ||
       order.type == OrderType::ImmediateOrCancel) [[unlikely]] {
     if (!order.is_filled()) {
@@ -125,7 +119,6 @@ OrderResult OrderBook::add_order(Order order) {
     emit_execution_report(order, order.filled_qty, result.avg_fill_price);
   }
 
-  // Flush any pending trades
   if (config_.batch_callbacks) [[likely]] {
     flush_trades();
   }
@@ -150,7 +143,6 @@ OrderResult OrderBook::cancel_order(OrderId order_id) {
   order.cancel();
   orders_.erase(it);
 
-  // Update best prices
   if (order.side == Side::Buy) {
     update_best_bid();
   } else {
@@ -175,7 +167,6 @@ OrderResult OrderBook::replace_order(OrderId order_id, Price new_price,
 
   Order &existing = it->second;
 
-  // same price = amend in place (keep time priority)
   if (existing.price == new_price) {
     auto &levels = (existing.side == Side::Buy) ? bid_levels_ : ask_levels_;
     auto level_it = levels.find(existing.price);
@@ -190,7 +181,6 @@ OrderResult OrderBook::replace_order(OrderId order_id, Price new_price,
     }
   }
 
-  // different price = cancel/replace, lose priority
   Side side = existing.side;
   Symbol symbol = existing.symbol;
   OrderType type = existing.type;
@@ -235,7 +225,6 @@ void OrderBook::match_order(Order &order) {
 
     PriceLevel &level = level_it->second;
 
-    // Hot path: match against resting orders at this price
     while (!order.is_filled() && !level.empty()) [[likely]] {
       const OrderId resting_id = level.front_order_id();
 
@@ -247,7 +236,6 @@ void OrderBook::match_order(Order &order) {
 
       Order &resting = resting_it->second;
 
-      // Self-trade prevention check
       if (config_.enable_self_trade_prevention) [[unlikely]] {
         if (std::abs(static_cast<int64_t>(order.id - resting.id)) < 100) {
           stopped_for_self_trade = true;
@@ -255,29 +243,24 @@ void OrderBook::match_order(Order &order) {
         }
       }
 
-      // Calculate fill quantity
       const Quantity fill_qty =
           std::min(order.remaining(), resting.remaining());
 
-      // Update orders
       order.fill(fill_qty);
       resting.fill(fill_qty);
       level.fill_front(fill_qty);
 
-      // Emit trade (will be batched)
       if (order.side == Side::Buy) {
         emit_trade(order, resting, best_opposite, fill_qty, Side::Buy);
       } else {
         emit_trade(resting, order, best_opposite, fill_qty, Side::Sell);
       }
 
-      // Remove filled resting order
       if (resting.is_filled()) [[likely]] {
         orders_.erase(resting_it);
       }
     }
 
-    // Clean up empty level
     if (level.empty()) {
       opposite_levels.erase(level_it);
       if (order.side == Side::Buy) {
@@ -292,14 +275,11 @@ void OrderBook::match_order(Order &order) {
 void OrderBook::insert_resting_order(Order order) {
   auto &levels = (order.side == Side::Buy) ? bid_levels_ : ask_levels_;
 
-  // Get or create price level
   auto [it, inserted] = levels.try_emplace(order.price, order.price);
   it->second.add_order(order.id, order.remaining());
 
-  // Store order
   orders_[order.id] = order;
 
-  // Update best price
   if (order.side == Side::Buy) {
     if (best_bid_ == INVALID_PRICE || order.price > best_bid_) {
       best_bid_ = order.price;
@@ -359,7 +339,6 @@ void OrderBook::emit_trade(const Order &buy, const Order &sell, Price price,
 
   if (config_.batch_callbacks) [[likely]] {
     pending_trades_.push_back(trade);
-    // Flush if batch is full
     if (pending_trades_.size() >= config_.trade_batch_size) [[unlikely]] {
       flush_trades();
     }
@@ -432,7 +411,6 @@ std::vector<PriceLevelUpdate> OrderBook::get_bids(size_t depth) const {
   std::vector<PriceLevelUpdate> result;
   result.reserve(std::min(depth, bid_levels_.size()));
 
-  // Collect all bid levels and sort by price descending
   std::vector<std::pair<Price, const PriceLevel *>> levels;
   for (const auto &[price, level] : bid_levels_) {
     if (!level.empty()) {
@@ -458,7 +436,6 @@ std::vector<PriceLevelUpdate> OrderBook::get_asks(size_t depth) const {
   std::vector<PriceLevelUpdate> result;
   result.reserve(std::min(depth, ask_levels_.size()));
 
-  // Collect all ask levels and sort by price ascending
   std::vector<std::pair<Price, const PriceLevel *>> levels;
   for (const auto &[price, level] : ask_levels_) {
     if (!level.empty()) {

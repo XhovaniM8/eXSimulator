@@ -47,3 +47,4 @@ Thumbs.db
 perf.data*
 cachegrind.out.*
 callgrind.out.*
+scripts/venv/
