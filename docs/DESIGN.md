@@ -10,7 +10,7 @@ Architecture decisions, data structure tradeoffs, and profiling results. Started
 
 Each `OrderBook` holds two `std::map<Price, PriceLevel>` — bids (descending) and asks (ascending). `std::map` is a red-black tree: O(log n) insert and lookup where n is the number of distinct active price levels.
 
-For most symbols under normal conditions, n stays small — 10–50 active levels. The log factor isn't the problem. The problem is `std::map` heap-allocates a node per price level, and that allocation shows up clearly in profiling.
+For most symbols under normal conditions, n stays small — 10–50 active levels. The problem is `std::map` heap-allocates a node per price level, and that allocation shows up clearly in profiling.
 
 Best bid and best ask are cached separately (`best_bid_`, `best_ask_`) so the matching engine checks for a cross in O(1) without touching the tree.
 
@@ -71,7 +71,7 @@ The dominant cost is price level tree insertion. Every unique price level that d
 
 Secondary cost is order storage — the `unordered_map<OrderId, Order>` also triggers aligned allocations on growth or 64-byte Order emplacement.
 
-**IPC:** 330B instructions / 120B cycles = **2.73 IPC**. On M-series (capable of 4–5+ IPC when cache-hot), 2.73 suggests moderate cache pressure. The allocator calls are the main culprit — they touch cold memory.
+**IPC:** 330B instructions / 120B cycles = **2.73 IPC**. On M-series (capable of 4–5+ IPC when cache-hot), 2.73 suggests moderate cache pressure. The allocator calls are the main culprit, they most likely touch cold memory.
 
 **"Always match" runs at 47M/s** because matching never inserts into the tree — it just removes from the front of an existing level. No allocation, pure linked-list traversal. That's the ceiling. Real workloads land somewhere in between depending on order flow mix.
 
