@@ -1,13 +1,5 @@
 // tests/test_order_book_comprehensive.cpp
 //
-// Comprehensive, unbiased test suite for OrderBook
-//
-// Test philosophy:
-// - Each test is independent (fresh book state)
-// - Tests verify BEHAVIOR, not implementation details
-// - Edge cases are tested explicitly
-// - Both success AND failure paths are verified
-// - No assumptions about internal data structures
 
 #include <cassert>
 #include <cstdio>
