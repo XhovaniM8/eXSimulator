@@ -1,11 +1,6 @@
-       ____  ___  _________.__               .__   __                
-  ____ \   \/  / /   _____/|__| _____ _____  |  |_/  |_  ___________ 
-_/ __ \ \     /  \_____  \ |  |/     \\__  \ |  |\   __\/  _ \_  __ \
-\  ___/ /     \  /        \|  |  Y Y  \/ __ \|  |_|  | (  <_> )  | \/
- \___  >___/\  \/_______  /|__|__|_|  (____  /____/__|  \____/|__|   
-     \/      \_/        \/          \/     \/                        
+<img width="557" height="100" alt="ascii-art-text" src="https://github.com/user-attachments/assets/f344f788-2bc0-40a2-ad74-071bc4a7802b" />
 
- 
+
 A limit order book matching engine in C++20. Built to understand how exchange infrastructure actually works — not just at the concept level, but at the data structure and latency level. The design prioritizes correctness first, then measurable throughput.
 
 Current throughput: **~5M orders/sec (add), ~10M/s (matching at scale), ~4.5M/s (cancel)**.
