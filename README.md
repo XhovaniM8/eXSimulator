@@ -1,5 +1,13 @@
-# eXSimulator
+/**
+ *           ____  ___  _________.__               .__   __                
+ *      ____ \   \/  / /   _____/|__| _____ _____  |  |_/  |_  ___________ 
+ *    _/ __ \ \     /  \_____  \ |  |/     \\__  \ |  |\   __\/  _ \_  __ \
+ *    \  ___/ /     \  /        \|  |  Y Y  \/ __ \|  |_|  | (  <_> )  | \/
+ *     \___  >___/\  \/_______  /|__|__|_|  (____  /____/__|  \____/|__|   
+ *         \/      \_/        \/          \/     \/                        
+ */
 
+ 
 A limit order book matching engine in C++20. Built to understand how exchange infrastructure actually works — not just at the concept level, but at the data structure and latency level. The design prioritizes correctness first, then measurable throughput.
 
 Current throughput: **~5M orders/sec (add), ~10M/s (matching at scale), ~4.5M/s (cancel)**.
