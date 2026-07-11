@@ -49,3 +49,4 @@ cachegrind.out.*
 callgrind.out.*
 scripts/venv/
 build/
+bench_*.txt

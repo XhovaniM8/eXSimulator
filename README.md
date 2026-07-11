@@ -3,7 +3,7 @@
 
 A limit order book matching engine in C++20. Built to understand how exchange infrastructure actually works — not just at the concept level, but at the data structure and latency level. The design prioritizes correctness first, then measurable throughput.
 
-Current throughput: **~5M orders/sec (add), ~10M/s (matching at scale), ~4.5M/s (cancel)**.
+Current throughput: **6.5M orders/sec (add, M1 Pro) / 2.8M/s (add, Intel i7)**, up to **60M/s** on the match-heavy path. SPSC queue throughput is architecture/compiler-dependent — see Performance table.
 
 ---
 
@@ -54,35 +54,29 @@ Trading Agents (producer thread)
 
 ## Order Types
 
-| Type     | Behavior                                                          |
-| -------- | ----------------------------------------------------------------- |
-| Limit    | Rest at price if not immediately matchable                        |
-| Market   | Fill at best available price, cancel any remaining quantity       |
-| IOC      | Fill whatever matches immediately, cancel the rest                |
-| FOK      | Fill entirely or cancel entirely — no partial fills               |
-| PostOnly | Reject if it would cross the spread (maker-only)                  |
+| Type     | Behavior                                                    |
+| -------- | ----------------------------------------------------------- |
+| Limit    | Rest at price if not immediately matchable                  |
+| Market   | Fill at best available price, cancel any remaining quantity |
+| IOC      | Fill whatever matches immediately, cancel the rest          |
+| FOK      | Fill entirely or cancel entirely — no partial fills         |
+| PostOnly | Reject if it would cross the spread (maker-only)            |
 
 ---
 
 ## Performance
 
-Measured on Apple M-series (10 cores), Release build (`-O3 -march=native`):
+Measured with Release build (`-O3 -march=native`), Google Benchmark, `-DBUILD_BENCHMARKS=ON`.
 
-| Benchmark                      | Throughput | Notes                                                         |
-| ------------------------------ | ---------- | ------------------------------------------------------------- |
-| AddOrder (no match)            | ~4.5M/s    | Inserts resting order, worst case — new price level each time |
-| AddOrder (always match)        | ~47M/s     | No insertion, just match and remove — cache stays hot         |
-| AddOrder (same price level)    | ~7M/s      | Appends to existing level, no tree insert                     |
-| CancelOrder                    | ~4.5M/s    | O(1) hashmap lookup — was 180K/s before the fix               |
-| Matching throughput (100K)     | ~10M/s     | Full produce+match pipeline                                   |
-| SPSC queue (single thread)     | ~104M/s    | Raw enqueue+dequeue cycle                                     |
-| SPSC queue (producer/consumer) | ~11M/s     | Cross-thread, cache coherence overhead visible                |
-
-The gap between "always match" (47M/s) and "no match" (4.5M/s) is the cost of a new price level insertion — heap alloc plus red-black tree rebalancing. That's the next thing to address.
-
----
-
-## Build
+| Benchmark                      | Apple M1 Pro (AppleClang 21) | Intel i7-9700F (GCC 13, `taskset -c 0`) |
+| ------------------------------ | ---------------------------- | --------------------------------------- |
+| AddOrder (no match)            | 6.52M/s                      | 2.77M/s                                 |
+| AddOrder (always match)        | 59.9M/s                      | 20.6M/s                                 |
+| AddOrder (same price level)    | 7.20M/s                      | 2.54M/s                                 |
+| CancelOrder                    | 3.43M/s                      | 2.25M/s                                 |
+| Matching throughput (100K)     | 12.4M/s                      | 5.44M/s                                 |
+| SPSC queue (single thread)     | 131M/s                       | 406M/s                                  |
+| SPSC queue (producer/consumer) | 17.0M/s\*                    | 186M/s\*\*                              |
 
 Requires CMake 3.20+, C++20 compiler (clang 14+ or gcc 12+).
 
